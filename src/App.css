@@ -1,0 +1,277 @@
+:root {
+  --bg: #1a1d23;
+  --panel: #23272f;
+  --panel-2: #2b3038;
+  --border: #363b44;
+  --text: #e6e8eb;
+  --muted: #8b929c;
+  --accent: #4f8cff;
+  --danger: #e84393;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  overflow: hidden;
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+/* ---------- Toolbar ---------- */
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+}
+
+.toolbar button {
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 7px 12px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.toolbar button:hover:not(:disabled) {
+  background: #343a44;
+  border-color: #4a5160;
+}
+
+.toolbar button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.toolbar button.export {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+  font-weight: 600;
+}
+
+.toolbar button.export:hover:not(:disabled) {
+  background: #3d78e6;
+}
+
+.toolbar .spacer {
+  flex: 1;
+}
+
+.time-display {
+  font-variant-numeric: tabular-nums;
+  font-size: 13px;
+  color: var(--muted);
+  padding: 0 8px;
+}
+
+.zoom-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.zoom-group button {
+  width: 28px;
+  padding: 6px 0;
+}
+
+.lang-select {
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 7px 8px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+/* ---------- Preview ---------- */
+.preview {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.preview-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.preview-placeholder {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: var(--muted);
+  pointer-events: none;
+}
+
+.preview-placeholder p {
+  margin: 0;
+  font-size: 18px;
+}
+
+/* ---------- Timeline ---------- */
+.timeline {
+  position: relative;
+  height: 160px;
+  background: var(--panel);
+  border-top: 1px solid var(--border);
+}
+
+.timeline-scroll {
+  height: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.timeline-content {
+  position: relative;
+  height: 100%;
+  min-width: 100%;
+}
+
+.ruler {
+  position: relative;
+  height: 26px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  user-select: none;
+}
+
+.tick {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  border-left: 1px solid var(--border);
+}
+
+.tick span {
+  position: absolute;
+  left: 4px;
+  top: 5px;
+  font-size: 10px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.track {
+  position: relative;
+  margin-top: 10px;
+  background: var(--panel-2);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.clip {
+  position: absolute;
+  top: 6px;
+  bottom: 6px;
+  border-radius: 5px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+  border: 2px solid transparent;
+}
+
+.clip.selected {
+  border-color: #fff;
+}
+
+.clip-label {
+  flex: 1;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.95);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+
+.trim-handle {
+  width: 8px;
+  align-self: stretch;
+  background: rgba(0, 0, 0, 0.35);
+  cursor: ew-resize;
+  flex: 0 0 auto;
+}
+
+.trim-handle:hover {
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: #ff4d4d;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.playhead::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -4px;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 7px solid #ff4d4d;
+}
+
+.timeline-empty {
+  position: absolute;
+  inset: 26px 0 0 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  font-size: 13px;
+  pointer-events: none;
+}
+
+/* ---------- Status bar ---------- */
+.statusbar {
+  padding: 5px 12px;
+  font-size: 12px;
+  color: var(--muted);
+  background: var(--panel);
+  border-top: 1px solid var(--border);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

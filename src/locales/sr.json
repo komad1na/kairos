@@ -1,0 +1,32 @@
+{
+  "toolbar": {
+    "import": "+ Uvezi video",
+    "play": "▶ Pusti",
+    "pause": "⏸ Pauza",
+    "delete": "🗑 Obriši isečak",
+    "zoom": "zum",
+    "zoomIn": "Povećaj zum",
+    "zoomOut": "Smanji zum",
+    "export": "⬇ Export",
+    "exporting": "Renderujem…",
+    "language": "Jezik"
+  },
+  "preview": {
+    "noVideo": "Nema videa",
+    "hint": "Klikni „Uvezi video\" da počneš."
+  },
+  "timeline": {
+    "empty": "Uvezi video da bi se pojavio na timeline-u."
+  },
+  "status": {
+    "ready": "Spreman.",
+    "readingMetadata": "Čitam metapodatke…",
+    "imported": "Uvezeno: {{name}} — {{width}}x{{height}}, {{fps}} fps, {{codec}}{{audio}}",
+    "audioYes": ", audio",
+    "audioNo": ", bez audija",
+    "importError": "Greška pri uvozu: {{error}}",
+    "exporting": "Renderujem export… (ovo može potrajati)",
+    "exportDone": "Export gotov: {{path}}",
+    "exportError": "Export greška: {{error}}"
+  }
+}

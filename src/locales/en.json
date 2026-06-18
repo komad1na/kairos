@@ -1,0 +1,32 @@
+{
+  "toolbar": {
+    "import": "+ Import video",
+    "play": "▶ Play",
+    "pause": "⏸ Pause",
+    "delete": "🗑 Delete clip",
+    "zoom": "zoom",
+    "zoomIn": "Zoom in",
+    "zoomOut": "Zoom out",
+    "export": "⬇ Export",
+    "exporting": "Rendering…",
+    "language": "Language"
+  },
+  "preview": {
+    "noVideo": "No video",
+    "hint": "Click \"Import video\" to start."
+  },
+  "timeline": {
+    "empty": "Import a video to see it on the timeline."
+  },
+  "status": {
+    "ready": "Ready.",
+    "readingMetadata": "Reading metadata…",
+    "imported": "Imported: {{name}} — {{width}}x{{height}}, {{fps}} fps, {{codec}}{{audio}}",
+    "audioYes": ", audio",
+    "audioNo": ", no audio",
+    "importError": "Import error: {{error}}",
+    "exporting": "Rendering export… (this may take a while)",
+    "exportDone": "Export done: {{path}}",
+    "exportError": "Export error: {{error}}"
+  }
+}
