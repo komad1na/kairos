@@ -6,6 +6,11 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "build:linux": "tauri build --bundles deb",
+    "build:linux:deb": "tauri build --bundles deb",
+    "build:windows": "tauri build --no-bundles",
+    "build:windows:exe": "tauri build --no-bundles",
+    "build:arch": "cd packaging/arch && makepkg -Csf",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",

@@ -1,0 +1,27 @@
+# Maintainer: Komadina
+pkgname=kairos
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Local non-destructive video editor"
+arch=('x86_64')
+url="https://github.com/komadina/kairos"
+license=('custom')
+depends=('ffmpeg' 'gtk3' 'libsoup3' 'librsvg' 'webkit2gtk-4.1')
+makedepends=('cargo' 'nodejs' 'npm' 'rust')
+source=()
+sha256sums=()
+
+_repo_root="$startdir/../.."
+
+build() {
+  cd "$_repo_root"
+  npm ci
+  npm run tauri -- build --no-bundle
+}
+
+package() {
+  cd "$_repo_root"
+  install -Dm755 "src-tauri/target/release/kairos" "$pkgdir/usr/bin/kairos"
+  install -Dm644 "src-tauri/icons/128x128.png" "$pkgdir/usr/share/icons/hicolor/128x128/apps/kairos.png"
+  install -Dm644 "packaging/linux/com.komadina.kairos.desktop" "$pkgdir/usr/share/applications/com.komadina.kairos.desktop"
+}

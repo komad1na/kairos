@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Kairos
+Comment=Local non-destructive video editor
+Exec=kairos
+Icon=kairos
+Terminal=false
+Categories=AudioVideo;Video;AudioVideoEditing;
