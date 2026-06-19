@@ -205,7 +205,9 @@ fn video_clip_effects_are_exported_as_filters() {
 
     let s = joined(&build_export_args(&p).unwrap());
     assert!(s.contains("hue=h=45"));
-    assert!(s.contains("eq=brightness=0.2:contrast=1.3:saturation=0.4"));
+    // Brightness is a multiply (matches the CSS-based preview), contrast/saturation stay in eq.
+    assert!(s.contains("colorchannelmixer=rr=1.2:gg=1.2:bb=1.2"));
+    assert!(s.contains("eq=contrast=1.3:saturation=0.4"));
     assert!(s.contains("gblur=sigma=3"));
     assert!(s.contains("colorchannelmixer=rr="));
     assert!(s.contains("lutrgb=r='val*-0.5+191.25'"));

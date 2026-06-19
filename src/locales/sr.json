@@ -23,7 +23,9 @@
     "minimize": "Minimizuj",
     "maximizeRestore": "Maksimizuj / vrati",
     "closeWindow": "Zatvori",
-    "language": "Jezik"
+    "language": "Jezik",
+    "undo": "Opozovi",
+    "redo": "Ponovi"
   },
   "project": {
     "new": "Novi projekat",
@@ -199,6 +201,7 @@
     "unlinkPreview": "Ukloni link",
     "unlinkPreviewHint": "Ovi isečci će postati nezavisni.",
     "unlink": "Razdvoji",
+    "splitClip": "Iseci na poziciji",
     "deleteClip": "Obriši isečak",
     "removeTrack": "Ukloni traku",
     "removeTrackConfirm": "Ukloniti traku {{name}} i njene isečke?"

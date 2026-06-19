@@ -82,6 +82,34 @@ export function placeClip(
   return start;
 }
 
+/**
+ * Find a single start ≥ `desiredStart` where a clip fits on `trackA` AND a
+ * time-aligned partner of `lengthB` fits on `trackB` (FR-015). Used for linked
+ * video+audio pairs so neither lane collides. Converges because `placeClip`
+ * only ever pushes right.
+ */
+export function placePair(
+  clips: Clip[],
+  trackA: string,
+  trackB: string,
+  desiredStart: number,
+  lengthA: number,
+  lengthB: number,
+  ignoreA?: string,
+  ignoreB?: string,
+): number {
+  let start = Math.max(0, desiredStart);
+  let guard = 0;
+  while (guard++ < 1000) {
+    const a = placeClip(clips, trackA, start, lengthA, ignoreA);
+    const b = placeClip(clips, trackB, start, lengthB, ignoreB);
+    const next = Math.max(a, b);
+    if (next === start) return start;
+    start = next;
+  }
+  return start;
+}
+
 /** Snap `candidate` to the nearest anchor within `threshold`; off when disabled (FR-015a). */
 export function snapTime(
   candidate: number,

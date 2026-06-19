@@ -1,20 +1,19 @@
 import { memo, useEffect, useRef, useState } from "react";
 import { Button, Empty, InputNumber, Slider, Switch, Tooltip } from "antd";
 import {
-  AudioMutedOutlined,
   DeleteOutlined,
-  LinkOutlined,
   PlusOutlined,
-  WarningOutlined,
   ZoomInOutlined,
   ZoomOutOutlined,
 } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
-import { Asset, Clip, ClipTransitionStyle, TimelineState, Track, TrackKind, clipLength } from "../types";
+import { Asset, Clip, TimelineState, Track, TrackKind } from "../types";
 import { Action } from "../timelineReducer";
 import { getActiveAssetDragId, readAssetDragId, setActiveAssetDragId } from "../dragDrop";
-import { clamp, formatTime, placeClip, snapAnchors, snapTime, timelineDuration } from "../timeline";
-import { Waveform } from "./Waveform";
+import { clamp, formatTime, placeClip, placePair, snapAnchors, snapTime, timelineDuration } from "../timeline";
+import { TimelineClip } from "./TimelineClip";
+import { tickStep, buildTicks } from "./timelineTicks";
+import { useTimelineDrag } from "./useTimelineDrag";
 
 const RULER_H = 34;
 const TRACK_H = 60;
@@ -26,7 +25,6 @@ const MIN_PX_PER_SEC = 10;
 const MAX_PX_PER_SEC = 300;
 const LABEL_TICK_MIN_PX = 58;
 const MINOR_TICK_MIN_PX = 24;
-const TICK_STEPS = [1 / 30, 0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300];
 
 interface Props {
   state: TimelineState;
@@ -34,29 +32,6 @@ interface Props {
   dispatch: React.Dispatch<Action>;
   onSeek: (t: number) => void;
 }
-
-type Drag =
-  | {
-      mode: "move";
-      id: string;
-      kind: TrackKind;
-      pointerId: number;
-      target: HTMLElement;
-      startX: number;
-      startStart: number;
-    }
-  | {
-      mode: "trim";
-      id: string;
-      edge: "in" | "out";
-      pointerId: number;
-      target: HTMLElement;
-      startX: number;
-      startIn: number;
-      startOut: number;
-      clipStartOrig: number;
-      sourceDuration: number;
-    };
 
 interface RulerScrub {
   pointerId: number;
@@ -73,31 +48,13 @@ interface DropPreviewClip {
   valid: boolean;
 }
 
-function tickStep(pxPerSec: number, minPixels: number): number {
-  for (const c of TICK_STEPS) if (c * pxPerSec >= minPixels) return c;
-  return TICK_STEPS[TICK_STEPS.length - 1];
-}
-
-function buildTicks(total: number, step: number): number[] {
-  const ticks: number[] = [];
-  for (let tk = 0; tk <= total + 0.0001; tk += step) ticks.push(roundTick(tk));
-  return ticks;
-}
-
-function roundTick(value: number): number {
-  return Math.round(value * 1000) / 1000;
-}
-
 export const Timeline = memo(function Timeline({ state, playhead, dispatch, onSeek }: Props) {
   const { t } = useTranslation();
   const timelineRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const rulerRef = useRef<HTMLDivElement>(null);
-  const dragRef = useRef<Drag | null>(null);
   const rulerScrubRef = useRef<RulerScrub | null>(null);
-  const dragFrameRef = useRef<number | null>(null);
-  const pendingDragActionRef = useRef<Action | null>(null);
   const [dropPreview, setDropPreview] = useState<DropPreviewClip[]>([]);
 
   // Refs so the window drag listeners always read the freshest values.
@@ -110,127 +67,13 @@ export const Timeline = memo(function Timeline({ state, playhead, dispatch, onSe
   const total = timelineDuration(clips);
   const contentWidth = Math.max(total * pxPerSec, 600);
   const assetOf = (clip: Clip): Asset | undefined => assets.find((a) => a.id === clip.assetId);
-  const trackKindOf = (id: string): TrackKind | undefined =>
-    tracks.find((tr) => tr.id === id)?.kind;
+
+  const { startMove, startTrim } = useTimelineDrag(stateRef, playheadRef, dispatch);
 
   function setZoom(value: number | null) {
     if (value == null) return;
     dispatch({ type: "setPxPerSec", value });
   }
-
-  useEffect(() => {
-    function flushDragAction() {
-      dragFrameRef.current = null;
-      const action = pendingDragActionRef.current;
-      pendingDragActionRef.current = null;
-      if (action) dispatch(action);
-    }
-
-    function finishDrag(pointerId?: number) {
-      const d = dragRef.current;
-      if (!d) return;
-      if (pointerId != null && d.pointerId !== pointerId) return;
-
-      try {
-        if (d.target.hasPointerCapture(d.pointerId)) {
-          d.target.releasePointerCapture(d.pointerId);
-        }
-      } catch {
-        /* pointer capture can disappear when the webview loses focus */
-      }
-
-      dragRef.current = null;
-      document.body.classList.remove("timeline-dragging");
-      if (dragFrameRef.current != null) {
-        cancelAnimationFrame(dragFrameRef.current);
-        flushDragAction();
-      }
-    }
-
-    function queueDragAction(action: Action) {
-      pendingDragActionRef.current = action;
-      if (dragFrameRef.current == null) {
-        dragFrameRef.current = requestAnimationFrame(flushDragAction);
-      }
-    }
-
-    function onMove(e: PointerEvent) {
-      const d = dragRef.current;
-      if (!d) return;
-      if (e.pointerId !== d.pointerId) return;
-      if (e.buttons === 0) {
-        finishDrag(e.pointerId);
-        return;
-      }
-      const st = stateRef.current;
-      const pps = st.pxPerSec;
-      const ph = playheadRef.current;
-      const dSec = (e.clientX - d.startX) / pps;
-      const anchors = snapAnchors(st, ph, d.id);
-      const thresh = SNAP_PX / pps;
-
-      if (d.mode === "move") {
-        let newStart = Math.max(0, snapTime(d.startStart + dSec, anchors, thresh, e.altKey));
-        let targetTrackId = st.clips.find((c) => c.id === d.id)?.trackId ?? "";
-        const lane = (document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null)?.closest(
-          "[data-track-id]",
-        ) as HTMLElement | null;
-        if (lane && lane.dataset.kind === d.kind && lane.dataset.trackId) {
-          targetTrackId = lane.dataset.trackId;
-        }
-        queueDragAction({ type: "moveClip", id: d.id, trackId: targetTrackId, start: newStart });
-      } else {
-        if (d.edge === "in") {
-          let value = clamp(d.startIn + dSec, 0, d.startOut - MIN_CLIP_LEN);
-          const snapped = snapTime(d.clipStartOrig + (value - d.startIn), anchors, thresh, e.altKey);
-          value = clamp(d.startIn + (snapped - d.clipStartOrig), 0, d.startOut - MIN_CLIP_LEN);
-          queueDragAction({ type: "trimClip", id: d.id, edge: "in", value });
-        } else {
-          let value = clamp(d.startOut + dSec, d.startIn + MIN_CLIP_LEN, d.sourceDuration);
-          const snapped = snapTime(d.clipStartOrig + (value - d.startIn), anchors, thresh, e.altKey);
-          value = clamp(
-            d.startIn + (snapped - d.clipStartOrig),
-            d.startIn + MIN_CLIP_LEN,
-            d.sourceDuration,
-          );
-          queueDragAction({ type: "trimClip", id: d.id, edge: "out", value });
-        }
-      }
-    }
-    function onUp(e: PointerEvent) {
-      finishDrag(e.pointerId);
-    }
-    function onCancel(e: PointerEvent) {
-      finishDrag(e.pointerId);
-    }
-    function onBlur() {
-      finishDrag();
-    }
-    function onContextMenu() {
-      finishDrag();
-    }
-    function onKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") finishDrag();
-    }
-    window.addEventListener("pointermove", onMove);
-    window.addEventListener("pointerup", onUp);
-    window.addEventListener("pointercancel", onCancel);
-    window.addEventListener("blur", onBlur);
-    window.addEventListener("contextmenu", onContextMenu);
-    window.addEventListener("keydown", onKeyDown);
-    return () => {
-      finishDrag();
-      window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerup", onUp);
-      window.removeEventListener("pointercancel", onCancel);
-      window.removeEventListener("blur", onBlur);
-      window.removeEventListener("contextmenu", onContextMenu);
-      window.removeEventListener("keydown", onKeyDown);
-      if (dragFrameRef.current != null) cancelAnimationFrame(dragFrameRef.current);
-      dragFrameRef.current = null;
-      pendingDragActionRef.current = null;
-    };
-  }, [dispatch]);
 
   useEffect(() => {
     const timeline = timelineRef.current;
@@ -372,55 +215,6 @@ export const Timeline = memo(function Timeline({ state, playhead, dispatch, onSe
     onSeek(clamp(playheadRef.current + direction * baseStep * speed * wheelUnits, 0, maxTime));
   }
 
-  function startMove(e: React.PointerEvent, clip: Clip) {
-    if (e.button !== 0 || !e.isPrimary) return;
-    e.stopPropagation();
-    e.preventDefault();
-    const target = e.currentTarget as HTMLElement;
-    try {
-      target.setPointerCapture(e.pointerId);
-    } catch {
-      /* best-effort: global listeners still finish the drag */
-    }
-    document.body.classList.add("timeline-dragging");
-    dispatch({ type: "select", id: clip.id });
-    dragRef.current = {
-      mode: "move",
-      id: clip.id,
-      kind: trackKindOf(clip.trackId) ?? "video",
-      pointerId: e.pointerId,
-      target,
-      startX: e.clientX,
-      startStart: clip.start,
-    };
-  }
-
-  function startTrim(e: React.PointerEvent, clip: Clip, edge: "in" | "out") {
-    if (e.button !== 0 || !e.isPrimary) return;
-    e.stopPropagation();
-    e.preventDefault();
-    const target = e.currentTarget as HTMLElement;
-    try {
-      target.setPointerCapture(e.pointerId);
-    } catch {
-      /* best-effort: global listeners still finish the trim */
-    }
-    document.body.classList.add("timeline-dragging");
-    dispatch({ type: "select", id: clip.id });
-    dragRef.current = {
-      mode: "trim",
-      id: clip.id,
-      edge,
-      pointerId: e.pointerId,
-      target,
-      startX: e.clientX,
-      startIn: clip.in,
-      startOut: clip.out,
-      clipStartOrig: clip.start,
-      sourceDuration: assetOf(clip)?.duration ?? clip.out,
-    };
-  }
-
   function onLaneDrop(e: React.DragEvent, track: Track) {
     e.preventDefault();
     setDropPreview([]);
@@ -506,9 +300,7 @@ export const Timeline = memo(function Timeline({ state, playhead, dispatch, onSe
     const audioTrack = target.kind === "audio" ? target : st.tracks.find((tr) => tr.kind === "audio");
     if (!videoTrack || !audioTrack) return invalid();
 
-    const videoStart = placeClip(st.clips, videoTrack.id, rawStart, length);
-    const audioStart = placeClip(st.clips, audioTrack.id, rawStart, length);
-    const start = Math.max(videoStart, audioStart);
+    const start = placePair(st.clips, videoTrack.id, audioTrack.id, rawStart, length, length);
 
     return [
       {
@@ -692,66 +484,19 @@ export const Timeline = memo(function Timeline({ state, playhead, dispatch, onSe
                   ))}
                 {clips
                   .filter((c) => c.trackId === tr.id)
-                  .map((clip) => {
-                    const asset = assetOf(clip);
-                    const left = clip.start * pxPerSec;
-                    const width = clipLength(clip) * pxPerSec;
-                    const fadeInWidth = fadePixels(clip.transitions?.fadeIn ?? 0, clip, pxPerSec);
-                    const fadeOutWidth = fadePixels(clip.transitions?.fadeOut ?? 0, clip, pxPerSec);
-                    const inStyle = clip.transitions?.inStyle ?? "fade";
-                    const outStyle = clip.transitions?.outStyle ?? "fade";
-                    const selected = clip.id === selectedClipId;
-                    return (
-                      <div
-                        key={clip.id}
-                        className={`clip ${tr.kind}${selected ? " selected" : ""}`}
-                        style={{ left, width }}
-                        onPointerDown={(e) => startMove(e, clip)}
-                        title={`${asset?.name ?? ""} (${formatTime(clipLength(clip))})`}
-                      >
-                        <div
-                          className="trim-handle left"
-                          onPointerDown={(e) => startTrim(e, clip, "in")}
-                        />
-                        <div className="clip-body">
-                          {fadeInWidth > 1 && (
-                            <div
-                              className={`clip-fade fade-in transition-${inStyle}`}
-                              style={{ width: fadeInWidth }}
-                              title={`${transitionStyleLabel(t, inStyle)} ${formatTime(clip.transitions.fadeIn)}`}
-                            />
-                          )}
-                          {fadeOutWidth > 1 && (
-                            <div
-                              className={`clip-fade fade-out transition-${outStyle}`}
-                              style={{ width: fadeOutWidth }}
-                              title={`${transitionStyleLabel(t, outStyle)} ${formatTime(clip.transitions.fadeOut)}`}
-                            />
-                          )}
-                          {tr.kind === "video" && asset?.thumbnailUrl && (
-                            <img className="clip-thumb" src={asset.thumbnailUrl} alt="" draggable={false} />
-                          )}
-                          {tr.kind === "audio" && asset && (
-                            <Waveform path={asset.path} width={Math.max(0, width - 16)} height={TRACK_H - 28} />
-                          )}
-                          <span className="clip-label">
-                            {clip.linkId && <LinkOutlined className="clip-icon" />}
-                            {asset?.name ?? ""}
-                            {clip.muted && <AudioMutedOutlined className="clip-icon" />}
-                          </span>
-                          {asset && !asset.previewable && (
-                            <Tooltip title={t("library.notPreviewableHint")}>
-                              <WarningOutlined className="clip-warn" />
-                            </Tooltip>
-                          )}
-                        </div>
-                        <div
-                          className="trim-handle right"
-                          onPointerDown={(e) => startTrim(e, clip, "out")}
-                        />
-                      </div>
-                    );
-                  })}
+                  .map((clip) => (
+                    <TimelineClip
+                      key={clip.id}
+                      clip={clip}
+                      asset={assetOf(clip)}
+                      trackKind={tr.kind}
+                      pxPerSec={pxPerSec}
+                      laneHeight={TRACK_H}
+                      selected={clip.id === selectedClipId}
+                      onStartMove={startMove}
+                      onStartTrim={startTrim}
+                    />
+                  ))}
               </div>
             ))}
 
@@ -771,19 +516,6 @@ export const Timeline = memo(function Timeline({ state, playhead, dispatch, onSe
     </div>
   );
 });
-
-function fadePixels(seconds: number, clip: Clip, pxPerSec: number): number {
-  const duration = clipLength(clip);
-  if (duration <= 0 || seconds <= 0) return 0;
-  return Math.min(duration, seconds) * pxPerSec;
-}
-
-function transitionStyleLabel(
-  t: (key: string) => string,
-  style: ClipTransitionStyle,
-): string {
-  return t(`timeline.transitionStyle.${style}`);
-}
 
 function canDropAssetOnTrack(asset: Asset, track: Track): boolean {
   if (!asset.previewPath) return false;

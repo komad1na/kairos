@@ -23,7 +23,9 @@
     "minimize": "Minimize",
     "maximizeRestore": "Maximize / restore",
     "closeWindow": "Close",
-    "language": "Language"
+    "language": "Language",
+    "undo": "Undo",
+    "redo": "Redo"
   },
   "project": {
     "new": "New project",
@@ -199,6 +201,7 @@
     "unlinkPreview": "Remove link",
     "unlinkPreviewHint": "These clips will become independent.",
     "unlink": "Unlink",
+    "splitClip": "Split at playhead",
     "deleteClip": "Delete clip",
     "removeTrack": "Remove track",
     "removeTrackConfirm": "Remove track {{name}} and its clips?"

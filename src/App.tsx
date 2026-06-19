@@ -27,7 +27,8 @@ import { useResizableWidth } from "./hooks/useResizableWidth";
 import { logDebug, logError, logInfo } from "./logger";
 import { usePlaybackEngine } from "./playback/usePlaybackEngine";
 import { buildExportProject, projectContentSignature, serializeProject } from "./projectDocument";
-import { Action, createInitialState, normalizeState, timelineReducer } from "./timelineReducer";
+import { Action, createInitialState, normalizeState } from "./timelineReducer";
+import { createInitialHistory, historyReducer } from "./history";
 import { summarizeAction } from "./timelineActionLog";
 import { timelineDuration } from "./timeline";
 import { ProjectSettings, TimelineState } from "./types";
@@ -45,10 +46,21 @@ import {
 
 function App() {
   const { t } = useTranslation();
-  const [state, dispatch] = useReducer(timelineReducer, undefined, createInitialState);
+  const [history, dispatch] = useReducer(historyReducer, undefined, createInitialHistory);
+  const state = history.present;
+  const canUndo = history.past.length > 0;
+  const canRedo = history.future.length > 0;
   const appDispatch = useCallback((action: Action) => {
     logDebug("timeline_action", summarizeAction(action));
     dispatch(action);
+  }, []);
+  const undo = useCallback(() => {
+    logInfo("timeline:undo");
+    dispatch({ type: "undo" });
+  }, []);
+  const redo = useCallback(() => {
+    logInfo("timeline:redo");
+    dispatch({ type: "redo" });
   }, []);
   const [exporting, setExporting] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
@@ -88,6 +100,7 @@ function App() {
   const exportStartedAt = useRef<number | null>(null);
   const allowWindowClose = useRef(false);
   const hasUnsavedChangesRef = useRef(false);
+  const playheadRef = useRef(0);
 
   const setLoggedStatus = useCallback((message: string) => {
     logInfo("status:update", { message });
@@ -104,6 +117,7 @@ function App() {
     state,
     setLoggedStatus,
   );
+  playheadRef.current = playhead;
 
   const total = timelineDuration(state.clips);
   const hasClips = state.clips.length > 0;
@@ -438,6 +452,10 @@ function App() {
     if (!state.selectedClipId) return;
     appDispatch({ type: "deleteClip", id: state.selectedClipId });
   }, [appDispatch, state.selectedClipId]);
+  const handleSplitClip = useCallback(() => {
+    if (!state.selectedClipId) return;
+    appDispatch({ type: "splitClip", id: state.selectedClipId, time: playheadRef.current });
+  }, [appDispatch, state.selectedClipId]);
   const handleTimelineZoomIn = useCallback(() => {
     appDispatch({ type: "setPxPerSec", value: state.pxPerSec * 1.15 });
   }, [appDispatch, state.pxPerSec]);
@@ -484,21 +502,47 @@ function App() {
     if (selectedClip) setTransformOpen(true);
   }, [selectedClip?.id]);
 
-  // Keyboard: Space = play/pause, Delete = remove selected clip.
+  // Keyboard: Ctrl+Z/Ctrl+Shift+Z = undo/redo, Space = play/pause,
+  // S = split selected clip at playhead, Delete = remove selected clip.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const el = e.target as HTMLElement;
-      if (el.closest("input, textarea, .ant-slider, .ant-select, .ant-switch, .ant-modal")) return;
+      const mod = e.ctrlKey || e.metaKey;
+      const typing = el.closest("input, textarea, [contenteditable], .ant-modal");
+
+      if (mod && (e.code === "KeyZ" || e.code === "KeyY")) {
+        if (typing) return; // let text fields handle their own undo
+        e.preventDefault();
+        if (e.code === "KeyY" || e.shiftKey) redo();
+        else undo();
+        return;
+      }
+      if (mod) return; // don't let other Ctrl combos trigger transport/edit keys
+
+      if (
+        el.closest(
+          "input, textarea, button, a, [role=\"button\"], [contenteditable], .ant-slider, .ant-select, .ant-switch, .ant-modal",
+        )
+      )
+        return;
       if (e.code === "Space") {
         e.preventDefault();
         toggle();
       } else if (e.code === "Delete" || e.code === "Backspace") {
-        if (state.selectedClipId) appDispatch({ type: "deleteClip", id: state.selectedClipId });
+        if (state.selectedClipId) {
+          e.preventDefault();
+          appDispatch({ type: "deleteClip", id: state.selectedClipId });
+        }
+      } else if (e.code === "KeyS") {
+        if (state.selectedClipId) {
+          e.preventDefault();
+          appDispatch({ type: "splitClip", id: state.selectedClipId, time: playheadRef.current });
+        }
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [appDispatch, toggle, state.selectedClipId]);
+  }, [appDispatch, toggle, undo, redo, state.selectedClipId]);
 
   return (
     <div className="app">
@@ -507,6 +551,8 @@ function App() {
         hasProject={hasProject}
         hasClips={hasClips}
         hasSelectedClip={Boolean(state.selectedClipId)}
+        canUndo={canUndo}
+        canRedo={canRedo}
         editOpen={transformOpen}
         showCanvasGuide={showCanvasGuide}
         onNew={handleNew}
@@ -515,8 +561,11 @@ function App() {
         onSettings={handleSettingsOpen}
         onPreferences={handlePreferencesOpen}
         onExport={handleExportOpen}
+        onUndo={undo}
+        onRedo={redo}
         onOpenEdit={handleOpenEditPanel}
         onCloseEdit={handleCloseEditPanel}
+        onSplitClip={handleSplitClip}
         onDeleteSelected={handleDeleteSelectedClip}
         onToggleCanvasGuide={handleToggleCanvasGuide}
         onTimelineZoomIn={handleTimelineZoomIn}

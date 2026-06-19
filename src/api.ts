@@ -22,6 +22,8 @@ const mediaDataUrls = new Map<string, string>();
 const pendingMediaDataUrls = new Map<string, Promise<string>>();
 const mediaBytes = new Map<string, ArrayBuffer>();
 const pendingMediaBytes = new Map<string, Promise<ArrayBuffer>>();
+const thumbnailUrls = new Map<string, string>();
+const pendingThumbnailUrls = new Map<string, Promise<string>>();
 
 /**
  * Native preview fallback for WebKitGTK when file/custom protocol URLs are
@@ -150,16 +152,33 @@ function arrayBufferToBase64(buf: ArrayBuffer): string {
 
 /**
  * Generates a single representative thumbnail (JPEG) and returns an object URL.
- * The caller is responsible for caching; URLs are cheap and live for the session.
+ * Cached per source path so re-imports and re-opened projects reuse one object
+ * URL per file instead of leaking a new one every time.
  */
-export async function generateThumbnail(
+export function generateThumbnail(
   path: string,
   time: number,
   maxWidth: number,
 ): Promise<string> {
-  const buf = await invoke<ArrayBuffer>("generate_thumbnail", { path, time, maxWidth });
-  const blob = new Blob([buf], { type: "image/jpeg" });
-  return URL.createObjectURL(blob);
+  const cached = thumbnailUrls.get(path);
+  if (cached) return Promise.resolve(cached);
+
+  const pending = pendingThumbnailUrls.get(path);
+  if (pending) return pending;
+
+  const next = invoke<ArrayBuffer>("generate_thumbnail", { path, time, maxWidth })
+    .then((buf) => {
+      const url = URL.createObjectURL(new Blob([buf], { type: "image/jpeg" }));
+      thumbnailUrls.set(path, url);
+      pendingThumbnailUrls.delete(path);
+      return url;
+    })
+    .catch((err) => {
+      pendingThumbnailUrls.delete(path);
+      throw err;
+    });
+  pendingThumbnailUrls.set(path, next);
+  return next;
 }
 
 /** Returns downsampled audio peaks (0..1) for rendering a clip's waveform. */

@@ -1,5 +1,5 @@
 import { memo, useEffect, useMemo, useRef, useState } from "react";
-import { Button, InputNumber, Select, Slider, Tooltip } from "antd";
+import { Button, Select, Slider, Tooltip } from "antd";
 import {
   CloseOutlined,
   DisconnectOutlined,
@@ -11,21 +11,19 @@ import {
 import { useTranslation } from "react-i18next";
 import {
   Asset,
-  CLIP_TRANSITION_STYLES,
   Clip,
   ClipEffects,
   ClipTransitions,
-  ClipTransitionStyle,
   ClipTransform,
   DEFAULT_CLIP_EFFECTS,
   DEFAULT_CLIP_TRANSITIONS,
   DEFAULT_CLIP_TRANSFORM,
-  Track,
   TimelineState,
-  clipLength,
 } from "../types";
 import { Action } from "../timelineReducer";
 import { clamp, formatTime } from "../timeline";
+import { EffectControl, TransitionStyleControl, WheelNumber } from "./DrawerControls";
+import { LinkSummary } from "./LinkPanel";
 
 interface Props {
   state: TimelineState;
@@ -37,17 +35,6 @@ interface Props {
 }
 
 type DrawerTab = "transform" | "effects" | "transitions" | "link";
-
-interface WheelNumberProps {
-  label: string;
-  value: number;
-  min: number;
-  max: number;
-  step: number;
-  precision?: number;
-  addonAfter?: string;
-  onChange: (value: number) => void;
-}
 
 export const TransformDrawer = memo(function TransformDrawer({
   state,
@@ -549,184 +536,6 @@ export const TransformDrawer = memo(function TransformDrawer({
   );
 });
 
-function LinkSummary({
-  title,
-  note,
-  connector,
-  first,
-  second,
-}: {
-  title: string;
-  note: string;
-  connector: React.ReactNode;
-  first: LinkSummaryItem;
-  second: LinkSummaryItem | null;
-}) {
-  return (
-    <div className="link-summary">
-      <div className="link-summary-head">
-        <div className="link-summary-title">{title}</div>
-        <div className="link-summary-note">{note}</div>
-      </div>
-      <LinkSummaryCard item={first} />
-      <div className="link-summary-connector">{connector}</div>
-      {second ? (
-        <LinkSummaryCard item={second} />
-      ) : (
-        <div className="link-summary-item muted">?</div>
-      )}
-    </div>
-  );
-}
-
-interface LinkSummaryItem {
-  label: string;
-  name: string;
-  clip: Clip;
-  track: Track | null | undefined;
-}
-
-function LinkSummaryCard({ item }: { item: LinkSummaryItem }) {
-  const { t } = useTranslation();
-  return (
-    <div className="link-summary-item">
-      <div className="link-summary-item-head">
-        <span className="link-summary-badge">{item.label}</span>
-        <span className="link-summary-track">{formatTrackLabel(item.track, t)}</span>
-      </div>
-      <div className="link-summary-name">{item.name}</div>
-      <div className="link-summary-times">
-        <span>{formatTime(item.clip.start)}</span>
-        <span>{formatTime(item.clip.start + clipLength(item.clip))}</span>
-        <span>{formatTime(clipLength(item.clip))}</span>
-      </div>
-    </div>
-  );
-}
-
-function EffectControl({
-  label,
-  value,
-  min,
-  max,
-  step,
-  precision,
-  addonAfter,
-  onChange,
-}: WheelNumberProps) {
-  return (
-    <div className="effect-control">
-      <WheelNumber
-        label={label}
-        value={value}
-        min={min}
-        max={max}
-        step={step}
-        precision={precision}
-        addonAfter={addonAfter}
-        onChange={onChange}
-      />
-      <Slider
-        min={min}
-        max={max}
-        step={step}
-        value={value}
-        onChange={(next) => onChange(next as number)}
-        tooltip={{ formatter: (next) => String(next ?? value) }}
-      />
-    </div>
-  );
-}
-
-function formatTrackLabel(track: Track | null | undefined, t: (key: string) => string): string {
-  if (!track) return "";
-  const kind = track.kind === "video" ? t("timeline.videoTrack") : t("timeline.audioTrack");
-  return `${kind} ${track.name}`;
-}
-
-function WheelNumber({
-  label,
-  value,
-  min,
-  max,
-  step,
-  precision,
-  addonAfter,
-  onChange,
-}: WheelNumberProps) {
-  const inputRef = useRef<HTMLDivElement | null>(null);
-
-  function commit(next: number) {
-    const factor = precision == null ? 1 : 10 ** precision;
-    onChange(Math.round(clamp(next, min, max) * factor) / factor);
-  }
-
-  function commitWheel(deltaY: number, shiftKey: boolean, altKey: boolean) {
-    const direction = deltaY < 0 ? 1 : -1;
-    const multiplier = shiftKey ? 10 : altKey ? 0.2 : 1;
-    commit(value + direction * step * multiplier);
-  }
-
-  useEffect(() => {
-    const node = inputRef.current;
-    if (!node) return;
-
-    function onWheel(event: WheelEvent) {
-      event.preventDefault();
-      event.stopPropagation();
-      event.stopImmediatePropagation();
-      commitWheel(event.deltaY, event.shiftKey, event.altKey);
-    }
-
-    node.addEventListener("wheel", onWheel, { capture: true, passive: false });
-    return () => node.removeEventListener("wheel", onWheel, { capture: true });
-  });
-
-  return (
-    <div className="wheel-number">
-      <span className="wheel-number-label">{label}</span>
-      <div className="wheel-number-input" ref={inputRef}>
-        <InputNumber
-          size="small"
-          min={min}
-          max={max}
-          step={step}
-          precision={precision}
-          value={value}
-          addonAfter={addonAfter}
-          onChange={(next) => commit(inputNumber(next, value))}
-        />
-      </div>
-    </div>
-  );
-}
-
-function TransitionStyleControl({
-  label,
-  value,
-  onChange,
-}: {
-  label: string;
-  value: ClipTransitionStyle;
-  onChange: (value: ClipTransitionStyle) => void;
-}) {
-  const { t } = useTranslation();
-  return (
-    <label className="transition-style-control">
-      <span>{label}</span>
-      <Select
-        size="small"
-        value={value}
-        options={CLIP_TRANSITION_STYLES.map((style) => ({
-          value: style,
-          label: t(`timeline.transitionStyle.${style}`),
-        }))}
-        onChange={onChange}
-      />
-    </label>
-  );
-}
-
 function fillScaleForAsset(asset: Asset, settings: TimelineState["settings"]): number {
   if (!asset.width || !asset.height || !settings.width || !settings.height) return 1;
   const fit = Math.min(settings.width / asset.width, settings.height / asset.height);
@@ -751,9 +560,4 @@ function linkCandidateScore(selected: Clip, candidate: Clip): number {
   score += Math.abs(candidate.in - selected.in) * 5;
   score += Math.abs(candidate.out - selected.out) * 5;
   return score;
-}
-
-function inputNumber(value: number | string | null, fallback: number): number {
-  const next = typeof value === "number" ? value : Number(value);
-  return Number.isFinite(next) ? next : fallback;
 }

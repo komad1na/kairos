@@ -11,9 +11,12 @@ import {
   FileAddOutlined,
   FolderOpenOutlined,
   MinusOutlined,
+  RedoOutlined,
   SaveOutlined,
+  ScissorOutlined,
   SettingOutlined,
   ToolOutlined,
+  UndoOutlined,
   ZoomInOutlined,
   ZoomOutOutlined,
 } from "@ant-design/icons";
@@ -24,6 +27,8 @@ interface Props {
   hasProject: boolean;
   hasClips: boolean;
   hasSelectedClip: boolean;
+  canUndo: boolean;
+  canRedo: boolean;
   editOpen: boolean;
   showCanvasGuide: boolean;
   onNew: () => void;
@@ -32,8 +37,11 @@ interface Props {
   onSettings: () => void;
   onPreferences: () => void;
   onExport: () => void;
+  onUndo: () => void;
+  onRedo: () => void;
   onOpenEdit: () => void;
   onCloseEdit: () => void;
+  onSplitClip: () => void;
   onDeleteSelected: () => void;
   onToggleCanvasGuide: () => void;
   onTimelineZoomIn: () => void;
@@ -48,6 +56,8 @@ export const Toolbar = memo(function Toolbar({
   hasProject,
   hasClips,
   hasSelectedClip,
+  canUndo,
+  canRedo,
   editOpen,
   showCanvasGuide,
   onNew,
@@ -56,8 +66,11 @@ export const Toolbar = memo(function Toolbar({
   onSettings,
   onPreferences,
   onExport,
+  onUndo,
+  onRedo,
   onOpenEdit,
   onCloseEdit,
+  onSplitClip,
   onDeleteSelected,
   onToggleCanvasGuide,
   onTimelineZoomIn,
@@ -105,6 +118,28 @@ export const Toolbar = memo(function Toolbar({
   ];
 
   const editItems: MenuProps["items"] = [
+    {
+      key: "undo",
+      icon: <UndoOutlined />,
+      label: t("toolbar.undo"),
+      disabled: !canUndo,
+      onClick: onUndo,
+    },
+    {
+      key: "redo",
+      icon: <RedoOutlined />,
+      label: t("toolbar.redo"),
+      disabled: !canRedo,
+      onClick: onRedo,
+    },
+    { type: "divider" },
+    {
+      key: "split-clip",
+      icon: <ScissorOutlined />,
+      label: t("timeline.splitClip"),
+      disabled: !hasSelectedClip,
+      onClick: onSplitClip,
+    },
     {
       key: "edit-open",
       icon: <ToolOutlined />,

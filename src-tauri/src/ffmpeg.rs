@@ -525,13 +525,17 @@ fn append_video_effect_filters(filter: &mut String, effects: ClipEffects) {
     if (effects.hue).abs() > 0.001 {
         filter.push_str(&format!(",hue=h={}", ffmpeg_number(effects.hue)));
     }
-    if (effects.brightness - 1.0).abs() > 0.001
-        || (effects.contrast - 1.0).abs() > 0.001
-        || (effects.saturation - 1.0).abs() > 0.001
-    {
+    // CSS `brightness()` (used by the realtime preview) is a per-channel multiply,
+    // but ffmpeg's `eq` brightness is additive. Match the preview by doing the
+    // multiply with colorchannelmixer; keep contrast/saturation in `eq`, which
+    // already mirror their CSS counterparts.
+    if (effects.brightness - 1.0).abs() > 0.001 {
+        let b = ffmpeg_number(effects.brightness);
+        filter.push_str(&format!(",colorchannelmixer=rr={b}:gg={b}:bb={b}"));
+    }
+    if (effects.contrast - 1.0).abs() > 0.001 || (effects.saturation - 1.0).abs() > 0.001 {
         filter.push_str(&format!(
-            ",eq=brightness={}:contrast={}:saturation={}",
-            ffmpeg_number((effects.brightness - 1.0).clamp(-1.0, 1.0)),
+            ",eq=contrast={}:saturation={}",
             ffmpeg_number(effects.contrast),
             ffmpeg_number(effects.saturation)
         ));

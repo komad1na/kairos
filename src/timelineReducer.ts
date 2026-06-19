@@ -19,9 +19,10 @@ import {
   Track,
   TimelineState,
   TrackKind,
+  clipEnd,
   clipLength,
 } from "./types";
-import { clamp, placeClip } from "./timeline";
+import { clamp, placeClip, placePair } from "./timeline";
 
 const MIN_CLIP_LEN = 0.1;
 const MIN_PX_PER_SEC = 10;
@@ -66,6 +67,7 @@ export type Action =
   | { type: "dropAsset"; asset: Asset; trackId: string; start: number }
   | { type: "moveClip"; id: string; trackId: string; start: number }
   | { type: "trimClip"; id: string; edge: "in" | "out"; value: number }
+  | { type: "splitClip"; id: string; time: number }
   | { type: "deleteClip"; id: string }
   | { type: "addTrack"; kind: TrackKind }
   | { type: "removeTrack"; id: string }
@@ -159,6 +161,9 @@ export function timelineReducer(state: TimelineState, action: Action): TimelineS
 
     case "trimClip":
       return trimClip(state, action.id, action.edge, action.value);
+
+    case "splitClip":
+      return splitClip(state, action.id, action.time);
 
     case "deleteClip":
       return deleteClips(state, [action.id]);
@@ -423,9 +428,16 @@ function dropAsset(
     audioTrack = s.tracks.find((t) => t.kind === "audio")!;
   }
 
-  const vAt = placeClip(s.clips, videoTrack.id, start, length);
-  const aAt = placeClip(s.clips, audioTrack.id, start, length);
-  const at = Math.max(vAt, aAt);
+  // Find a single start where BOTH the video and audio clip fit, so a linked
+  // pair never lands on top of an existing clip on either lane (FR-015).
+  const at = placePair(
+    s.clips,
+    videoTrack.id,
+    audioTrack.id,
+    Math.max(0, start),
+    length,
+    length,
+  );
   const linkId = uid();
   const vClip: Clip = { ...newClip(asset.id, videoTrack.id, at, length), linkId };
   const aClip: Clip = { ...newClip(asset.id, audioTrack.id, at, length), linkId };
@@ -452,10 +464,23 @@ function moveClip(
   // Only move across tracks of the same kind (FR-013); else keep the track.
   const finalTrackId =
     requested && requested.kind === clipKind ? trackId : clip.trackId;
-  const newStart = placeClip(state.clips, finalTrackId, start, clipLength(clip), clip.id);
-  const delta = newStart - clip.start;
-
   const partner = partnerOf(state, clip);
+
+  // A linked pair stays time-aligned, so it must land where BOTH lanes are free;
+  // otherwise the partner could be pushed on top of another clip (FR-032/FR-015).
+  const newStart = partner
+    ? placePair(
+        state.clips,
+        finalTrackId,
+        partner.trackId,
+        Math.max(0, start),
+        clipLength(clip),
+        clipLength(partner),
+        clip.id,
+        partner.id,
+      )
+    : placeClip(state.clips, finalTrackId, start, clipLength(clip), clip.id);
+  const delta = newStart - clip.start;
   return {
     ...state,
     clips: state.clips.map((c) => {
@@ -502,6 +527,71 @@ function trimClip(
       return c;
     }),
   };
+}
+
+/**
+ * Cut a clip in two at timeline time `time` (the razor tool). The left half keeps
+ * the original id (and any in-edge transition); the right half is new (and keeps
+ * the out-edge transition). A linked pair is cut on both lanes and each side is
+ * re-linked so the halves still move together (FR-032).
+ */
+function splitClip(state: TimelineState, id: string, time: number): TimelineState {
+  const clip = clipById(state, id);
+  if (!clip) return state;
+  const partner = partnerOf(state, clip);
+  const group = partner ? [clip, partner] : [clip];
+
+  // Both sides of every clip in the group must stay at least MIN_CLIP_LEN long.
+  for (const c of group) {
+    if (time <= c.start + MIN_CLIP_LEN || time >= clipEnd(c) - MIN_CLIP_LEN) {
+      return state;
+    }
+  }
+
+  const groupIds = new Set(group.map((c) => c.id));
+  const leftHalves: Clip[] = [];
+  const rightHalves: Clip[] = [];
+
+  const clips = state.clips.flatMap((c) => {
+    if (!groupIds.has(c.id)) return [c];
+    const splitSource = c.in + (time - c.start);
+    const left: Clip = {
+      ...c,
+      out: splitSource,
+      transitions: { ...c.transitions, fadeOut: 0, outStyle: DEFAULT_CLIP_TRANSITIONS.outStyle },
+      linkId: null,
+    };
+    const right: Clip = {
+      ...c,
+      id: uid(),
+      start: time,
+      in: splitSource,
+      transitions: { ...c.transitions, fadeIn: 0, inStyle: DEFAULT_CLIP_TRANSITIONS.inStyle },
+      linkId: null,
+    };
+    leftHalves.push(left);
+    rightHalves.push(right);
+    return [left, right];
+  });
+
+  let links = state.links;
+  if (partner && clip.linkId) {
+    links = links.filter((l) => l.id !== clip.linkId);
+    const relink = (halves: Clip[]): Link | null => {
+      const v = halves.find((c) => trackById(state, c.trackId)?.kind === "video");
+      const a = halves.find((c) => trackById(state, c.trackId)?.kind === "audio");
+      if (!v || !a) return null;
+      const linkId = uid();
+      v.linkId = linkId;
+      a.linkId = linkId;
+      return { id: linkId, clipIds: [v.id, a.id] };
+    };
+    const left = relink(leftHalves);
+    const right = relink(rightHalves);
+    links = [...links, ...(left ? [left] : []), ...(right ? [right] : [])];
+  }
+
+  return { ...state, clips, links, selectedClipId: clip.id };
 }
 
 /** Delete the given clips plus any linked partners and their links. */

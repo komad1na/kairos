@@ -50,6 +50,25 @@ describe("dropAsset", () => {
     s = timelineReducer(s, { type: "dropAsset", asset: a, trackId: videoTrack.id, start: 0 });
     expect(s.clips).toHaveLength(0);
   });
+
+  it("keeps a linked pair clear of existing clips on BOTH lanes (FR-015)", () => {
+    const videoAsset = asset({ id: "vid", kind: "video" });
+    const audioAsset = asset({ id: "aud", kind: "audio" });
+    const both = asset({ id: "both", kind: "both" });
+    let s = withAsset(videoAsset);
+    s = timelineReducer(s, { type: "addAsset", asset: audioAsset });
+    s = timelineReducer(s, { type: "addAsset", asset: both });
+    const videoTrack = s.tracks.find((t) => t.kind === "video")!;
+    const audioTrack = s.tracks.find((t) => t.kind === "audio")!;
+    // Video lane busy at 5..10, audio lane busy at 0..5.
+    s = timelineReducer(s, { type: "dropAsset", asset: videoAsset, trackId: videoTrack.id, start: 5 });
+    s = timelineReducer(s, { type: "dropAsset", asset: audioAsset, trackId: audioTrack.id, start: 0 });
+    // The linked pair dropped at 0 must clear both lanes -> lands at 10.
+    s = timelineReducer(s, { type: "dropAsset", asset: both, trackId: videoTrack.id, start: 0 });
+    const pair = s.clips.filter((c) => c.linkId);
+    expect(pair).toHaveLength(2);
+    expect(pair.map((c) => c.start)).toEqual([10, 10]);
+  });
 });
 
 describe("linked move & trim move together (FR-032)", () => {
@@ -66,6 +85,24 @@ describe("linked move & trim move together (FR-032)", () => {
     s = timelineReducer(s, { type: "moveClip", id: v.id, trackId: v.trackId, start: 3 });
     expect(s.clips[0].start).toBe(3);
     expect(s.clips[1].start).toBe(3);
+  });
+  it("moving a linked pair clears clips on the partner lane (FR-032)", () => {
+    const both = asset({ id: "both", kind: "both" });
+    const extra = asset({ id: "extra", kind: "audio" });
+    let s = withAsset(both);
+    s = timelineReducer(s, { type: "addAsset", asset: extra });
+    const videoTrack = s.tracks.find((t) => t.kind === "video")!;
+    const audioTrack = s.tracks.find((t) => t.kind === "audio")!;
+    s = timelineReducer(s, { type: "dropAsset", asset: both, trackId: videoTrack.id, start: 0 });
+    // Extra audio clip occupies 5..10 on the audio lane.
+    s = timelineReducer(s, { type: "dropAsset", asset: extra, trackId: audioTrack.id, start: 5 });
+    const video = s.clips.find((c) => c.trackId === videoTrack.id && c.linkId)!;
+    // Moving the pair to 5 would overlap the extra audio clip, so push to 10.
+    s = timelineReducer(s, { type: "moveClip", id: video.id, trackId: video.trackId, start: 5 });
+    const movedVideo = s.clips.find((c) => c.id === video.id)!;
+    const movedAudio = s.clips.find((c) => c.linkId === video.linkId && c.id !== video.id)!;
+    expect(movedVideo.start).toBe(10);
+    expect(movedAudio.start).toBe(10);
   });
   it("unlink lets them move independently", () => {
     let s = pair();
@@ -89,6 +126,48 @@ describe("linked move & trim move together (FR-032)", () => {
     s = timelineReducer(s, { type: "moveClip", id: video.id, trackId: video.trackId, start: 2 });
     expect(s.clips[0].start).toBe(2);
     expect(s.clips[1].start).toBe(2);
+  });
+});
+
+describe("splitClip", () => {
+  it("cuts a clip into two halves at the given time", () => {
+    const a = asset({ id: "v", kind: "video", duration: 10 });
+    let s = withAsset(a);
+    const videoTrack = s.tracks.find((t) => t.kind === "video")!;
+    s = timelineReducer(s, { type: "dropAsset", asset: a, trackId: videoTrack.id, start: 0 });
+    const id = s.clips[0].id;
+    s = timelineReducer(s, { type: "splitClip", id, time: 4 });
+    expect(s.clips).toHaveLength(2);
+    const sorted = [...s.clips].sort((x, y) => x.start - y.start);
+    expect(sorted[0]).toMatchObject({ id, start: 0, in: 0, out: 4 });
+    expect(sorted[1]).toMatchObject({ start: 4, in: 4, out: 10 });
+    expect(s.selectedClipId).toBe(id);
+  });
+
+  it("rejects a split too close to a clip edge", () => {
+    const a = asset({ id: "v", kind: "video", duration: 10 });
+    let s = withAsset(a);
+    const videoTrack = s.tracks.find((t) => t.kind === "video")!;
+    s = timelineReducer(s, { type: "dropAsset", asset: a, trackId: videoTrack.id, start: 0 });
+    const before = s;
+    s = timelineReducer(s, { type: "splitClip", id: s.clips[0].id, time: 0.05 });
+    expect(s).toBe(before);
+  });
+
+  it("splits a linked pair on both lanes and relinks each side (FR-032)", () => {
+    const a = asset({ id: "v", kind: "both", duration: 10 });
+    let s = withAsset(a);
+    const videoTrack = s.tracks.find((t) => t.kind === "video")!;
+    s = timelineReducer(s, { type: "dropAsset", asset: a, trackId: videoTrack.id, start: 0 });
+    const video = s.clips.find((c) => c.trackId === videoTrack.id)!;
+    s = timelineReducer(s, { type: "splitClip", id: video.id, time: 4 });
+    expect(s.clips).toHaveLength(4);
+    expect(s.links).toHaveLength(2);
+    for (const link of s.links) {
+      const [c1, c2] = link.clipIds.map((cid) => s.clips.find((c) => c.id === cid)!);
+      expect(c1.start).toBe(c2.start);
+      expect(c1.linkId).toBe(c2.linkId);
+    }
   });
 });
 
