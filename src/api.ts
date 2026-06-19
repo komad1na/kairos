@@ -310,15 +310,6 @@ export function requestAppExit(): Promise<void> {
   return invoke("request_app_exit");
 }
 
-/** Minimizes the main app window from the native side. */
-export function requestWindowMinimize(): Promise<void> {
-  return invoke("request_window_minimize");
-}
-
-/** Toggles maximize/restore on the main app window from the native side. */
-export function requestWindowToggleMaximize(): Promise<void> {
-  return invoke("request_window_toggle_maximize");
-}
 
 const VIDEO_EXTENSIONS = withUppercaseExtensions(["mp4", "mov", "mkv", "webm", "avi", "m4v"]);
 const AUDIO_EXTENSIONS = withUppercaseExtensions([
@@ -354,13 +345,13 @@ export async function pickExportPath(): Promise<string | null> {
   return selected ?? null;
 }
 
-const PROJECT_EXT = "veproj";
+const PROJECT_EXT = "kairos";
 
 /** Opens a dialog to save a project file. Returns the path or null. */
-export async function pickSaveProjectPath(): Promise<string | null> {
+export async function pickSaveProjectPath(defaultName = "Untitled"): Promise<string | null> {
   const selected = await save({
-    defaultPath: `project.${PROJECT_EXT}`,
-    filters: [{ name: "Kairos Project", extensions: [PROJECT_EXT, "json"] }],
+    defaultPath: `${defaultName}.${PROJECT_EXT}`,
+    filters: [{ name: "Kairos Project", extensions: [PROJECT_EXT] }],
   });
   return selected ?? null;
 }
@@ -370,7 +361,7 @@ export async function pickOpenProjectPath(): Promise<string | null> {
   const selected = await open({
     multiple: false,
     directory: false,
-    filters: [{ name: "Kairos Project", extensions: [PROJECT_EXT, "json"] }],
+    filters: [{ name: "Kairos Project", extensions: [PROJECT_EXT] }],
   });
   return typeof selected === "string" ? selected : null;
 }

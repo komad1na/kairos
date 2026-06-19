@@ -1,6 +1,6 @@
 # Maintainer: Komadina
 pkgname=kairos
-pkgver=0.1.0
+pkgver=0.3.0
 pkgrel=1
 pkgdesc="Local non-destructive video editor"
 arch=('x86_64')

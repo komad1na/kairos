@@ -1,5 +1,5 @@
 import { memo, useEffect, useRef, useState } from "react";
-import { Button, Empty, InputNumber, Slider, Switch, Tooltip } from "antd";
+import { Button, InputNumber, Slider, Switch, Tooltip } from "antd";
 import {
   DeleteOutlined,
   PlusOutlined,
@@ -508,11 +508,6 @@ export const Timeline = memo(function Timeline({ state, playhead, dispatch, onSe
         </div>
       </div>
 
-      {clips.length === 0 && (
-        <div className="timeline-empty">
-          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t("timeline.empty")} />
-        </div>
-      )}
     </div>
   );
 });

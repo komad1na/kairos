@@ -30,7 +30,7 @@ struct PreparedVideoClip {
 
 /// Hides the console window on Windows; does nothing on other platforms.
 fn command(program: &str) -> Command {
-    let cmd = Command::new(program);
+    let cmd = Command::new(resolve_program(program));
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
@@ -41,6 +41,25 @@ fn command(program: &str) -> Command {
     }
     #[allow(unreachable_code)]
     cmd
+}
+
+/// On Windows, prefer an `ffmpeg.exe`/`ffprobe.exe` shipped next to our own
+/// executable (bundled via Tauri resources, or placed beside a portable build);
+/// otherwise fall back to the one on `PATH`. Other platforms always use `PATH`.
+fn resolve_program(program: &str) -> std::ffi::OsString {
+    #[cfg(windows)]
+    {
+        if let Some(dir) = std::env::current_exe()
+            .ok()
+            .and_then(|exe| exe.parent().map(|d| d.to_path_buf()))
+        {
+            let candidate = dir.join(format!("{program}.exe"));
+            if candidate.is_file() {
+                return candidate.into_os_string();
+            }
+        }
+    }
+    std::ffi::OsString::from(program)
 }
 
 /// Turns "30000/1001" or "30/1" into a floating point number.

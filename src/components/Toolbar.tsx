@@ -1,16 +1,13 @@
 import { memo } from "react";
-import { Button, Dropdown, Tooltip } from "antd";
+import { Button, Dropdown } from "antd";
 import type { MenuProps } from "antd";
 import {
-  BorderOutlined,
   BorderOuterOutlined,
   CheckOutlined,
-  CloseOutlined,
   DeleteOutlined,
   DownloadOutlined,
   FileAddOutlined,
   FolderOpenOutlined,
-  MinusOutlined,
   RedoOutlined,
   SaveOutlined,
   ScissorOutlined,
@@ -46,9 +43,6 @@ interface Props {
   onToggleCanvasGuide: () => void;
   onTimelineZoomIn: () => void;
   onTimelineZoomOut: () => void;
-  onMinimize: () => void;
-  onToggleMaximize: () => void;
-  onCloseWindow: () => void;
 }
 
 export const Toolbar = memo(function Toolbar({
@@ -75,9 +69,6 @@ export const Toolbar = memo(function Toolbar({
   onToggleCanvasGuide,
   onTimelineZoomIn,
   onTimelineZoomOut,
-  onMinimize,
-  onToggleMaximize,
-  onCloseWindow,
 }: Props) {
   const { t } = useTranslation();
 
@@ -85,19 +76,19 @@ export const Toolbar = memo(function Toolbar({
     {
       key: "new",
       icon: <FileAddOutlined />,
-      label: t("project.new"),
+      label: <ShortcutLabel label={t("project.new")} shortcut="Ctrl+N" />,
       onClick: onNew,
     },
     {
       key: "open",
       icon: <FolderOpenOutlined />,
-      label: t("project.open"),
+      label: <ShortcutLabel label={t("project.open")} shortcut="Ctrl+O" />,
       onClick: onOpen,
     },
     {
       key: "save",
       icon: <SaveOutlined />,
-      label: t("project.save"),
+      label: <ShortcutLabel label={t("project.save")} shortcut="Ctrl+S" />,
       disabled: !hasProject,
       onClick: onSave,
     },
@@ -112,7 +103,7 @@ export const Toolbar = memo(function Toolbar({
     {
       key: "preferences",
       icon: <ToolOutlined />,
-      label: t("preferences.title"),
+      label: <ShortcutLabel label={t("preferences.title")} shortcut="Ctrl+," />,
       onClick: onPreferences,
     },
   ];
@@ -121,14 +112,14 @@ export const Toolbar = memo(function Toolbar({
     {
       key: "undo",
       icon: <UndoOutlined />,
-      label: t("toolbar.undo"),
+      label: <ShortcutLabel label={t("toolbar.undo")} shortcut="Ctrl+Z" />,
       disabled: !canUndo,
       onClick: onUndo,
     },
     {
       key: "redo",
       icon: <RedoOutlined />,
-      label: t("toolbar.redo"),
+      label: <ShortcutLabel label={t("toolbar.redo")} shortcut="Ctrl+Y" />,
       disabled: !canRedo,
       onClick: onRedo,
     },
@@ -136,7 +127,7 @@ export const Toolbar = memo(function Toolbar({
     {
       key: "split-clip",
       icon: <ScissorOutlined />,
-      label: t("timeline.splitClip"),
+      label: <ShortcutLabel label={t("timeline.splitClip")} shortcut="S" />,
       disabled: !hasSelectedClip,
       onClick: onSplitClip,
     },
@@ -150,7 +141,7 @@ export const Toolbar = memo(function Toolbar({
     {
       key: "delete-selected",
       icon: <DeleteOutlined />,
-      label: t("timeline.deleteClip"),
+      label: <ShortcutLabel label={t("timeline.deleteClip")} shortcut="Del" />,
       danger: true,
       disabled: !hasSelectedClip,
       onClick: onDeleteSelected,
@@ -168,20 +159,20 @@ export const Toolbar = memo(function Toolbar({
     {
       key: "zoom-in",
       icon: <ZoomInOutlined />,
-      label: t("toolbar.timelineZoomIn"),
+      label: <ShortcutLabel label={t("toolbar.timelineZoomIn")} shortcut="Ctrl+=" />,
       onClick: onTimelineZoomIn,
     },
     {
       key: "zoom-out",
       icon: <ZoomOutOutlined />,
-      label: t("toolbar.timelineZoomOut"),
+      label: <ShortcutLabel label={t("toolbar.timelineZoomOut")} shortcut="Ctrl+-" />,
       onClick: onTimelineZoomOut,
     },
   ];
 
   return (
     <header className="toolbar">
-      <div className="brand-mark" data-tauri-drag-region onDoubleClick={onToggleMaximize}>
+      <div className="brand-mark">
         <span className="brand-symbol">K</span>
         <span className="brand-name">{t("app.title")}</span>
       </div>
@@ -192,11 +183,7 @@ export const Toolbar = memo(function Toolbar({
         <MenuButton label={t("toolbar.view")} items={viewItems} />
       </nav>
 
-      <div
-        className="titlebar-drag-region"
-        data-tauri-drag-region
-        onDoubleClick={onToggleMaximize}
-      />
+      <div className="toolbar-spacer" />
 
       <Button
         className="topbar-export"
@@ -206,39 +193,10 @@ export const Toolbar = memo(function Toolbar({
         disabled={!hasProject || !hasClips || exporting}
         loading={exporting}
         onClick={onExport}
+        title="Ctrl+E"
       >
         {t("toolbar.export")}
       </Button>
-
-      <div className="window-controls">
-        <Tooltip title={t("toolbar.minimize")}>
-          <Button
-            className="window-control"
-            size="small"
-            type="text"
-            icon={<MinusOutlined />}
-            onClick={onMinimize}
-          />
-        </Tooltip>
-        <Tooltip title={t("toolbar.maximizeRestore")}>
-          <Button
-            className="window-control"
-            size="small"
-            type="text"
-            icon={<BorderOutlined />}
-            onClick={onToggleMaximize}
-          />
-        </Tooltip>
-        <Tooltip title={t("toolbar.closeWindow")}>
-          <Button
-            className="window-control close"
-            size="small"
-            type="text"
-            icon={<CloseOutlined />}
-            onClick={onCloseWindow}
-          />
-        </Tooltip>
-      </div>
     </header>
   );
 });
@@ -258,5 +216,14 @@ function MenuButton({
         {label}
       </Button>
     </Dropdown>
+  );
+}
+
+function ShortcutLabel({ label, shortcut }: { label: string; shortcut: string }) {
+  return (
+    <span className="menu-item-with-shortcut">
+      <span>{label}</span>
+      <kbd>{shortcut}</kbd>
+    </span>
   );
 }

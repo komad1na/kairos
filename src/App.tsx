@@ -39,8 +39,6 @@ import {
   pickOpenProjectPath,
   pickSaveProjectPath,
   requestAppExit,
-  requestWindowMinimize,
-  requestWindowToggleMaximize,
   saveProject,
 } from "./api";
 
@@ -274,30 +272,7 @@ function App() {
     }
   }, [closeApp, saveCurrentProject]);
 
-  const handleWindowCloseRequest = useCallback(() => {
-    if (hasUnsavedChangesRef.current) {
-      logInfo("ui:close:unsaved_prompt");
-      setClosePromptOpen(true);
-      return;
-    }
-    void closeApp();
-  }, [closeApp]);
 
-  const handleWindowMinimize = useCallback(() => {
-    logInfo("ui:window:minimize");
-    void requestWindowMinimize().catch((e) => {
-      setLoggedStatus(t("status.windowError", { error: String(e) }));
-      logError("ui:window:minimize:error", e);
-    });
-  }, [setLoggedStatus, t]);
-
-  const handleWindowToggleMaximize = useCallback(() => {
-    logInfo("ui:window:toggle_maximize");
-    void requestWindowToggleMaximize().catch((e) => {
-      setLoggedStatus(t("status.windowError", { error: String(e) }));
-      logError("ui:window:toggle_maximize:error", e);
-    });
-  }, [setLoggedStatus, t]);
 
   const handleProjectSettingsSave = useCallback(
     async (settings: ProjectSettings) => {
@@ -312,6 +287,14 @@ function App() {
         setSavedProjectSignature(null);
         setSettingsOpen(false);
         setLoggedStatus(t("status.newProject"));
+        try {
+          const path = await pickSaveProjectPath();
+          if (path) {
+            await persistProject(path, next);
+          }
+        } catch (e) {
+          logError("project:create:save:error", e);
+        }
         return;
       }
 
@@ -502,13 +485,55 @@ function App() {
     if (selectedClip) setTransformOpen(true);
   }, [selectedClip?.id]);
 
-  // Keyboard: Ctrl+Z/Ctrl+Shift+Z = undo/redo, Space = play/pause,
-  // S = split selected clip at playhead, Delete = remove selected clip.
+  // Keyboard: standard project/edit/view shortcuts plus transport and clip editing keys.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const el = e.target as HTMLElement;
       const mod = e.ctrlKey || e.metaKey;
+      const inModal = Boolean(el.closest(".ant-modal"));
       const typing = el.closest("input, textarea, [contenteditable], .ant-modal");
+
+      if (mod && e.code === "KeyS") {
+        e.preventDefault();
+        if (!inModal) void saveCurrentProject();
+        return;
+      }
+
+      if (mod && e.code === "KeyN") {
+        e.preventDefault();
+        if (!inModal) handleNew();
+        return;
+      }
+
+      if (mod && e.code === "KeyO") {
+        e.preventDefault();
+        if (!inModal) void handleOpen();
+        return;
+      }
+
+      if (mod && e.code === "KeyE") {
+        e.preventDefault();
+        if (!inModal && hasProject && hasClips && !exporting) handleExportOpen();
+        return;
+      }
+
+      if (mod && e.code === "Comma") {
+        e.preventDefault();
+        if (!inModal) handlePreferencesOpen();
+        return;
+      }
+
+      if (mod && (e.code === "Equal" || e.code === "NumpadAdd")) {
+        e.preventDefault();
+        if (!inModal) handleTimelineZoomIn();
+        return;
+      }
+
+      if (mod && (e.code === "Minus" || e.code === "NumpadSubtract")) {
+        e.preventDefault();
+        if (!inModal) handleTimelineZoomOut();
+        return;
+      }
 
       if (mod && (e.code === "KeyZ" || e.code === "KeyY")) {
         if (typing) return; // let text fields handle their own undo
@@ -528,6 +553,18 @@ function App() {
       if (e.code === "Space") {
         e.preventDefault();
         toggle();
+      } else if (e.code === "Home") {
+        e.preventDefault();
+        handleJumpStart();
+      } else if (e.code === "End") {
+        e.preventDefault();
+        handleJumpEnd();
+      } else if (e.code === "ArrowLeft") {
+        e.preventDefault();
+        handleStepBackward();
+      } else if (e.code === "ArrowRight") {
+        e.preventDefault();
+        handleStepForward();
       } else if (e.code === "Delete" || e.code === "Backspace") {
         if (state.selectedClipId) {
           e.preventDefault();
@@ -542,7 +579,27 @@ function App() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [appDispatch, toggle, undo, redo, state.selectedClipId]);
+  }, [
+    appDispatch,
+    exporting,
+    handleExportOpen,
+    handleJumpEnd,
+    handleJumpStart,
+    handleNew,
+    handleOpen,
+    handlePreferencesOpen,
+    handleStepBackward,
+    handleStepForward,
+    handleTimelineZoomIn,
+    handleTimelineZoomOut,
+    hasClips,
+    hasProject,
+    redo,
+    saveCurrentProject,
+    state.selectedClipId,
+    toggle,
+    undo,
+  ]);
 
   return (
     <div className="app">
@@ -570,9 +627,6 @@ function App() {
         onToggleCanvasGuide={handleToggleCanvasGuide}
         onTimelineZoomIn={handleTimelineZoomIn}
         onTimelineZoomOut={handleTimelineZoomOut}
-        onMinimize={handleWindowMinimize}
-        onToggleMaximize={handleWindowToggleMaximize}
-        onCloseWindow={handleWindowCloseRequest}
       />
 
       <div className="workspace">

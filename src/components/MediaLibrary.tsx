@@ -1,5 +1,5 @@
 import { memo, useCallback } from "react";
-import { Button, Empty, List, Popconfirm, Tag, Tooltip, Typography } from "antd";
+import { Button, Empty, List, Popconfirm, Tooltip, Typography } from "antd";
 import {
   CustomerServiceOutlined,
   DeleteOutlined,
@@ -143,10 +143,24 @@ export const MediaLibrary = memo(function MediaLibrary({
                       )}
                     </div>
                     <div className="library-meta">
-                      <div className="library-name-row">
-                        <Tooltip title={a.name}>
-                          <div className="library-name">{a.name}</div>
-                        </Tooltip>
+                      <Tooltip title={a.name}>
+                        <div className="library-name">{a.name}</div>
+                      </Tooltip>
+                      <div className="library-sub">
+                        <Typography.Text type="secondary" className="library-dur">
+                          {formatTime(a.duration)}
+                        </Typography.Text>
+                        {!cacheReady && (
+                          <span className="library-cache-status">
+                            <LoadingOutlined />
+                            <span>{t("library.caching")}</span>
+                          </span>
+                        )}
+                        {!a.previewable && (
+                          <Tooltip title={t("library.notPreviewableHint")}>
+                            <WarningOutlined className="library-warn-icon" />
+                          </Tooltip>
+                        )}
                         <div
                           className="library-actions"
                           onPointerDown={(e) => e.stopPropagation()}
@@ -170,29 +184,6 @@ export const MediaLibrary = memo(function MediaLibrary({
                             </Tooltip>
                           </Popconfirm>
                         </div>
-                      </div>
-                      <div className="library-sub">
-                        <Tag color={a.kind === "audio" ? "purple" : "blue"} bordered={false}>
-                          {t(`library.kind.${a.kind}`)}
-                        </Tag>
-                        <div className="library-status-row">
-                          {!cacheReady && (
-                            <span className="library-cache-status">
-                              <LoadingOutlined />
-                              <span>{t("library.caching")}</span>
-                            </span>
-                          )}
-                          {!a.previewable && (
-                            <Tooltip title={t("library.notPreviewableHint")}>
-                              <Tag icon={<WarningOutlined />} color="warning" bordered={false}>
-                                {t("library.notPreviewable")}
-                              </Tag>
-                            </Tooltip>
-                          )}
-                        </div>
-                        <Typography.Text type="secondary" className="library-dur">
-                          {formatTime(a.duration)}
-                        </Typography.Text>
                       </div>
                     </div>
                   </div>

@@ -31,3 +31,6 @@ packaging/arch/src/
 packaging/arch/*.pkg.tar.zst
 packaging/arch/*.pkg.tar.xz
 packaging/arch/*.tar.gz
+
+# Bundled Windows ffmpeg binaries (download per build/CI, don't commit)
+src-tauri/binaries/*.exe

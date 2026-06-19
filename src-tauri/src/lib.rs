@@ -232,27 +232,6 @@ async fn request_app_exit(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-#[tauri::command]
-async fn request_window_minimize(app: AppHandle) -> Result<(), String> {
-    log_info("request_window_minimize");
-    let window = app
-        .get_webview_window("main")
-        .ok_or_else(|| "main window not found".to_string())?;
-    window.minimize().map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn request_window_toggle_maximize(app: AppHandle) -> Result<(), String> {
-    log_info("request_window_toggle_maximize");
-    let window = app
-        .get_webview_window("main")
-        .ok_or_else(|| "main window not found".to_string())?;
-    if window.is_maximized().map_err(|e| e.to_string())? {
-        window.unmaximize().map_err(|e| e.to_string())
-    } else {
-        window.maximize().map_err(|e| e.to_string())
-    }
-}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -304,9 +283,7 @@ pub fn run() {
             load_project,
             append_session_log,
             session_log_snapshot,
-            request_app_exit,
-            request_window_minimize,
-            request_window_toggle_maximize
+            request_app_exit
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

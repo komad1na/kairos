@@ -57,7 +57,7 @@ export const TransportControls = memo(function TransportControls({
       <div className="transport-row">
         <div />
         <div className="transport-controls">
-          <Tooltip title={t("transport.jumpStart")}>
+          <Tooltip title={shortcutTitle(t("transport.jumpStart"), "Home")}>
             <Button
               size="small"
               icon={<FastBackwardOutlined />}
@@ -65,7 +65,7 @@ export const TransportControls = memo(function TransportControls({
               disabled={disabled}
             />
           </Tooltip>
-          <Tooltip title={t("transport.stepBack")}>
+          <Tooltip title={shortcutTitle(t("transport.stepBack"), "Left")}>
             <Button
               size="small"
               icon={<StepBackwardOutlined />}
@@ -73,7 +73,7 @@ export const TransportControls = memo(function TransportControls({
               disabled={disabled}
             />
           </Tooltip>
-          <Tooltip title={playing ? t("transport.pause") : t("transport.play")}>
+          <Tooltip title={shortcutTitle(playing ? t("transport.pause") : t("transport.play"), "Space")}>
             <Button
               size="small"
               type="primary"
@@ -85,7 +85,7 @@ export const TransportControls = memo(function TransportControls({
           <Tooltip title={t("transport.stop")}>
             <Button size="small" icon={<BorderOutlined />} onClick={onStop} disabled={disabled} />
           </Tooltip>
-          <Tooltip title={t("transport.stepForward")}>
+          <Tooltip title={shortcutTitle(t("transport.stepForward"), "Right")}>
             <Button
               size="small"
               icon={<StepForwardOutlined />}
@@ -93,7 +93,7 @@ export const TransportControls = memo(function TransportControls({
               disabled={disabled}
             />
           </Tooltip>
-          <Tooltip title={t("transport.jumpEnd")}>
+          <Tooltip title={shortcutTitle(t("transport.jumpEnd"), "End")}>
             <Button
               size="small"
               icon={<FastForwardOutlined />}
@@ -109,3 +109,7 @@ export const TransportControls = memo(function TransportControls({
     </div>
   );
 });
+
+function shortcutTitle(label: string, shortcut: string) {
+  return `${label} (${shortcut})`;
+}
