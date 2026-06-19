@@ -42,7 +42,7 @@ Follow-up TODOs:
   - Decide the proxy/transcode policy for codecs WebKitGTK cannot decode (defer until hit).
 -->
 
-# Video Editor Constitution
+# Kairos Constitution
 
 ## Core Principles
 

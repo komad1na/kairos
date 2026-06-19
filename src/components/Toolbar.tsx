@@ -1,86 +1,227 @@
+import { memo } from "react";
+import { Button, Dropdown, Tooltip } from "antd";
+import type { MenuProps } from "antd";
+import {
+  BorderOutlined,
+  BorderOuterOutlined,
+  CheckOutlined,
+  CloseOutlined,
+  DeleteOutlined,
+  DownloadOutlined,
+  FileAddOutlined,
+  FolderOpenOutlined,
+  MinusOutlined,
+  SaveOutlined,
+  SettingOutlined,
+  ToolOutlined,
+  ZoomInOutlined,
+  ZoomOutOutlined,
+} from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
-import { formatTime } from "../timeline";
-import { LANGUAGES } from "../i18n";
 
 interface Props {
-  playing: boolean;
   exporting: boolean;
+  hasProject: boolean;
   hasClips: boolean;
-  hasSelection: boolean;
-  currentTime: number;
-  total: number;
-  onImport: () => void;
-  onTogglePlay: () => void;
-  onDeleteSelected: () => void;
-  onZoomIn: () => void;
-  onZoomOut: () => void;
+  hasSelectedClip: boolean;
+  editOpen: boolean;
+  showCanvasGuide: boolean;
+  onNew: () => void;
+  onOpen: () => void;
+  onSave: () => void;
+  onSettings: () => void;
+  onPreferences: () => void;
   onExport: () => void;
+  onOpenEdit: () => void;
+  onCloseEdit: () => void;
+  onDeleteSelected: () => void;
+  onToggleCanvasGuide: () => void;
+  onTimelineZoomIn: () => void;
+  onTimelineZoomOut: () => void;
+  onMinimize: () => void;
+  onToggleMaximize: () => void;
+  onCloseWindow: () => void;
 }
 
-export function Toolbar({
-  playing,
+export const Toolbar = memo(function Toolbar({
   exporting,
+  hasProject,
   hasClips,
-  hasSelection,
-  currentTime,
-  total,
-  onImport,
-  onTogglePlay,
-  onDeleteSelected,
-  onZoomIn,
-  onZoomOut,
+  hasSelectedClip,
+  editOpen,
+  showCanvasGuide,
+  onNew,
+  onOpen,
+  onSave,
+  onSettings,
+  onPreferences,
   onExport,
+  onOpenEdit,
+  onCloseEdit,
+  onDeleteSelected,
+  onToggleCanvasGuide,
+  onTimelineZoomIn,
+  onTimelineZoomOut,
+  onMinimize,
+  onToggleMaximize,
+  onCloseWindow,
 }: Props) {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
+
+  const projectItems: MenuProps["items"] = [
+    {
+      key: "new",
+      icon: <FileAddOutlined />,
+      label: t("project.new"),
+      onClick: onNew,
+    },
+    {
+      key: "open",
+      icon: <FolderOpenOutlined />,
+      label: t("project.open"),
+      onClick: onOpen,
+    },
+    {
+      key: "save",
+      icon: <SaveOutlined />,
+      label: t("project.save"),
+      disabled: !hasProject,
+      onClick: onSave,
+    },
+    { type: "divider" },
+    {
+      key: "settings",
+      icon: <SettingOutlined />,
+      label: t("project.settings"),
+      disabled: !hasProject,
+      onClick: onSettings,
+    },
+    {
+      key: "preferences",
+      icon: <ToolOutlined />,
+      label: t("preferences.title"),
+      onClick: onPreferences,
+    },
+  ];
+
+  const editItems: MenuProps["items"] = [
+    {
+      key: "edit-open",
+      icon: <ToolOutlined />,
+      label: editOpen ? t("timeline.closeEdit") : t("timeline.openEdit"),
+      disabled: !hasSelectedClip && !editOpen,
+      onClick: editOpen ? onCloseEdit : onOpenEdit,
+    },
+    {
+      key: "delete-selected",
+      icon: <DeleteOutlined />,
+      label: t("timeline.deleteClip"),
+      danger: true,
+      disabled: !hasSelectedClip,
+      onClick: onDeleteSelected,
+    },
+  ];
+
+  const viewItems: MenuProps["items"] = [
+    {
+      key: "canvas-guide",
+      icon: showCanvasGuide ? <CheckOutlined /> : <BorderOuterOutlined />,
+      label: showCanvasGuide ? t("preview.hideCanvasGuide") : t("preview.showCanvasGuide"),
+      onClick: onToggleCanvasGuide,
+    },
+    { type: "divider" },
+    {
+      key: "zoom-in",
+      icon: <ZoomInOutlined />,
+      label: t("toolbar.timelineZoomIn"),
+      onClick: onTimelineZoomIn,
+    },
+    {
+      key: "zoom-out",
+      icon: <ZoomOutOutlined />,
+      label: t("toolbar.timelineZoomOut"),
+      onClick: onTimelineZoomOut,
+    },
+  ];
 
   return (
-    <div className="toolbar">
-      <button onClick={onImport}>{t("toolbar.import")}</button>
-
-      <button onClick={onTogglePlay} disabled={!hasClips}>
-        {playing ? t("toolbar.pause") : t("toolbar.play")}
-      </button>
-
-      <button onClick={onDeleteSelected} disabled={!hasSelection}>
-        {t("toolbar.delete")}
-      </button>
-
-      <div className="time-display">
-        {formatTime(currentTime)} / {formatTime(total)}
+    <header className="toolbar">
+      <div className="brand-mark" data-tauri-drag-region onDoubleClick={onToggleMaximize}>
+        <span className="brand-symbol">K</span>
+        <span className="brand-name">{t("app.title")}</span>
       </div>
 
-      <div className="spacer" />
+      <nav className="menu-bar" aria-label={t("toolbar.mainMenu")}>
+        <MenuButton label={t("toolbar.project")} items={projectItems} />
+        <MenuButton label={t("toolbar.edit")} items={editItems} />
+        <MenuButton label={t("toolbar.view")} items={viewItems} />
+      </nav>
 
-      <div className="zoom-group">
-        <button onClick={onZoomOut} title={t("toolbar.zoomOut")}>
-          −
-        </button>
-        <span>{t("toolbar.zoom")}</span>
-        <button onClick={onZoomIn} title={t("toolbar.zoomIn")}>
-          +
-        </button>
-      </div>
+      <div
+        className="titlebar-drag-region"
+        data-tauri-drag-region
+        onDoubleClick={onToggleMaximize}
+      />
 
-      <select
-        className="lang-select"
-        title={t("toolbar.language")}
-        value={i18n.language}
-        onChange={(e) => i18n.changeLanguage(e.target.value)}
-      >
-        {LANGUAGES.map((l) => (
-          <option key={l.code} value={l.code}>
-            {l.label}
-          </option>
-        ))}
-      </select>
-
-      <button
-        className="export"
+      <Button
+        className="topbar-export"
+        size="small"
+        type="primary"
+        icon={<DownloadOutlined />}
+        disabled={!hasProject || !hasClips || exporting}
+        loading={exporting}
         onClick={onExport}
-        disabled={!hasClips || exporting}
       >
-        {exporting ? t("toolbar.exporting") : t("toolbar.export")}
-      </button>
-    </div>
+        {t("toolbar.export")}
+      </Button>
+
+      <div className="window-controls">
+        <Tooltip title={t("toolbar.minimize")}>
+          <Button
+            className="window-control"
+            size="small"
+            type="text"
+            icon={<MinusOutlined />}
+            onClick={onMinimize}
+          />
+        </Tooltip>
+        <Tooltip title={t("toolbar.maximizeRestore")}>
+          <Button
+            className="window-control"
+            size="small"
+            type="text"
+            icon={<BorderOutlined />}
+            onClick={onToggleMaximize}
+          />
+        </Tooltip>
+        <Tooltip title={t("toolbar.closeWindow")}>
+          <Button
+            className="window-control close"
+            size="small"
+            type="text"
+            icon={<CloseOutlined />}
+            onClick={onCloseWindow}
+          />
+        </Tooltip>
+      </div>
+    </header>
+  );
+});
+
+function MenuButton({
+  label,
+  items,
+  loading,
+}: {
+  label: string;
+  items: MenuProps["items"];
+  loading?: boolean;
+}) {
+  return (
+    <Dropdown menu={{ items }} trigger={["click"]}>
+      <Button className="menu-trigger" size="small" type="text" loading={loading}>
+        {label}
+      </Button>
+    </Dropdown>
   );
 }
