@@ -1,5 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
+import { openPath } from "@tauri-apps/plugin-opener";
+import { loadGeneralPreferences } from "./generalPreferences";
 import type { VideoInfo } from "./types";
 
 /** Reads metadata of the selected media file via Rust/ffprobe. */
@@ -257,8 +259,8 @@ export interface ExportProject {
   width: number;
   height: number;
   fps: number;
-  /** Video encoder: software x264 or NVIDIA NVENC. */
-  encoder: "x264" | "h264Nvenc";
+  /** Video encoder: software x264, NVIDIA NVENC, or AMD AMF. */
+  encoder: "x264" | "h264Nvenc" | "h264Amf";
   /** Rate control mode for x264 export. */
   rateControl: "crf" | "bitrate";
   /** x264 quality (CRF): lower = better/larger. */
@@ -305,6 +307,22 @@ export function sessionLogSnapshot(): Promise<SessionLogSnapshot> {
   return invoke<SessionLogSnapshot>("session_log_snapshot");
 }
 
+export interface GpuAdapter {
+  name: string;
+  vendor: string;
+  integrated?: boolean | null;
+}
+
+/** Returns display adapters detected by the native shell. */
+export function gpuAdapters(): Promise<GpuAdapter[]> {
+  return invoke<GpuAdapter[]>("gpu_adapters");
+}
+
+/** Opens a file or folder with the system default app. */
+export function openSystemPath(path: string): Promise<void> {
+  return openPath(path);
+}
+
 /** Requests a native app exit after frontend save/discard decisions are done. */
 export function requestAppExit(): Promise<void> {
   return invoke("request_app_exit");
@@ -338,8 +356,9 @@ export async function pickMediaFile(): Promise<string | null> {
 
 /** Opens a dialog to save the output file. Returns the path or null. */
 export async function pickExportPath(): Promise<string | null> {
+  const { defaultExportFolder } = loadGeneralPreferences();
   const selected = await save({
-    defaultPath: "export.mp4",
+    defaultPath: defaultPath(defaultExportFolder, "export.mp4"),
     filters: [{ name: "Video", extensions: ["mp4"] }],
   });
   return selected ?? null;
@@ -349,8 +368,9 @@ const PROJECT_EXT = "kairos";
 
 /** Opens a dialog to save a project file. Returns the path or null. */
 export async function pickSaveProjectPath(defaultName = "Untitled"): Promise<string | null> {
+  const { defaultProjectFolder } = loadGeneralPreferences();
   const selected = await save({
-    defaultPath: `${defaultName}.${PROJECT_EXT}`,
+    defaultPath: defaultPath(defaultProjectFolder, `${defaultName}.${PROJECT_EXT}`),
     filters: [{ name: "Kairos Project", extensions: [PROJECT_EXT] }],
   });
   return selected ?? null;
@@ -358,10 +378,27 @@ export async function pickSaveProjectPath(defaultName = "Untitled"): Promise<str
 
 /** Opens a dialog to open a project file. Returns the path or null. */
 export async function pickOpenProjectPath(): Promise<string | null> {
+  const { defaultProjectFolder } = loadGeneralPreferences();
   const selected = await open({
     multiple: false,
     directory: false,
+    defaultPath: defaultProjectFolder || undefined,
     filters: [{ name: "Kairos Project", extensions: [PROJECT_EXT] }],
   });
   return typeof selected === "string" ? selected : null;
+}
+
+/** Opens a dialog to pick a folder. Returns the path or null. */
+export async function pickFolderPath(defaultPath?: string): Promise<string | null> {
+  const selected = await open({
+    multiple: false,
+    directory: true,
+    defaultPath: defaultPath || undefined,
+  });
+  return typeof selected === "string" ? selected : null;
+}
+
+function defaultPath(folder: string, filename: string): string {
+  if (!folder) return filename;
+  return `${folder.replace(/[\\/]$/, "")}/${filename}`;
 }

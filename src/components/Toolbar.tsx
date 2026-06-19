@@ -1,5 +1,5 @@
 import { memo } from "react";
-import { Button, Dropdown } from "antd";
+import { Button, Dropdown, Tooltip } from "antd";
 import type { MenuProps } from "antd";
 import {
   BorderOuterOutlined,
@@ -71,6 +71,7 @@ export const Toolbar = memo(function Toolbar({
   onTimelineZoomOut,
 }: Props) {
   const { t } = useTranslation();
+  const editLabel = editOpen ? t("timeline.closeEdit") : t("timeline.openEdit");
 
   const projectItems: MenuProps["items"] = [
     {
@@ -134,8 +135,14 @@ export const Toolbar = memo(function Toolbar({
     {
       key: "edit-open",
       icon: <ToolOutlined />,
-      label: editOpen ? t("timeline.closeEdit") : t("timeline.openEdit"),
-      disabled: !hasSelectedClip && !editOpen,
+      label: hasSelectedClip ? (
+        editLabel
+      ) : (
+        <Tooltip title={t("timeline.selectClipForEdit")} placement="right">
+          <span>{editLabel}</span>
+        </Tooltip>
+      ),
+      disabled: !hasSelectedClip,
       onClick: editOpen ? onCloseEdit : onOpenEdit,
     },
     {

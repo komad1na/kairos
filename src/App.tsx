@@ -29,6 +29,11 @@ import { usePlaybackEngine } from "./playback/usePlaybackEngine";
 import { buildExportProject, projectContentSignature, serializeProject } from "./projectDocument";
 import { Action, createInitialState, normalizeState } from "./timelineReducer";
 import { createInitialHistory, historyReducer } from "./history";
+import {
+  applyGeneralPreferences,
+  GeneralPreferences,
+  loadGeneralPreferences,
+} from "./generalPreferences";
 import { summarizeAction } from "./timelineActionLog";
 import { timelineDuration } from "./timeline";
 import { ProjectSettings, TimelineState } from "./types";
@@ -72,6 +77,9 @@ function App() {
   const [hasProject, setHasProject] = useState(false);
   const [projectPath, setProjectPath] = useState<string | null>(null);
   const [savedProjectSignature, setSavedProjectSignature] = useState<string | null>(null);
+  const [generalPreferences, setGeneralPreferences] = useState<GeneralPreferences>(() =>
+    loadGeneralPreferences(),
+  );
   const [transformOpen, setTransformOpen] = useState(false);
   const [exportProgress, setExportProgress] = useState<number | null>(null);
   const [exportEtaSec, setExportEtaSec] = useState<number | null>(null);
@@ -126,6 +134,19 @@ function App() {
   useEffect(() => {
     hasUnsavedChangesRef.current = hasUnsavedChanges;
   }, [hasUnsavedChanges]);
+
+  useEffect(() => {
+    applyGeneralPreferences(generalPreferences);
+  }, [generalPreferences]);
+
+  useEffect(() => {
+    const onPreferencesChanged = (event: Event) => {
+      const next = (event as CustomEvent<GeneralPreferences>).detail;
+      if (next) setGeneralPreferences(next);
+    };
+    window.addEventListener("general-preferences-changed", onPreferencesChanged);
+    return () => window.removeEventListener("general-preferences-changed", onPreferencesChanged);
+  }, []);
 
   const requestNativeExit = useCallback(async () => {
     try {
@@ -244,6 +265,29 @@ function App() {
   const handleSave = useCallback(() => {
     void saveCurrentProject();
   }, [saveCurrentProject]);
+
+  useEffect(() => {
+    const minutes = generalPreferences.autosaveIntervalMinutes;
+    if (!minutes || !hasProject || !projectPath || !hasUnsavedChanges) return;
+    const timeout = window.setTimeout(() => {
+      if (!hasUnsavedChangesRef.current) return;
+      logInfo("project:autosave:start", { path: projectPath, minutes });
+      void persistProject(projectPath, state).catch((e) => {
+        setLoggedStatus(t("status.saveError", { error: String(e) }));
+        logError("project:autosave:error", e);
+      });
+    }, minutes * 60_000);
+    return () => window.clearTimeout(timeout);
+  }, [
+    generalPreferences.autosaveIntervalMinutes,
+    hasProject,
+    hasUnsavedChanges,
+    persistProject,
+    projectPath,
+    setLoggedStatus,
+    state,
+    t,
+  ]);
 
   const closeApp = useCallback(async () => {
     await requestNativeExit();
@@ -424,17 +468,25 @@ function App() {
     handleCanvasGuideChange(!showCanvasGuide);
   }, [handleCanvasGuideChange, showCanvasGuide]);
   const handleOpenEditPanel = useCallback(() => {
+    if (!state.selectedClipId) return;
     logInfo("ui:transform_drawer:open_from_menu");
     setTransformOpen(true);
-  }, []);
+  }, [state.selectedClipId]);
+  const handleTransformOpenChange = useCallback(
+    (open: boolean) => {
+      setTransformOpen(open && Boolean(state.selectedClipId));
+    },
+    [state.selectedClipId],
+  );
   const handleCloseEditPanel = useCallback(() => {
     logInfo("ui:transform_drawer:close_from_menu");
     setTransformOpen(false);
   }, []);
   const handleDeleteSelectedClip = useCallback(() => {
     if (!state.selectedClipId) return;
+    if (generalPreferences.confirmDeletes && !confirm(t("timeline.deleteClipConfirm"))) return;
     appDispatch({ type: "deleteClip", id: state.selectedClipId });
-  }, [appDispatch, state.selectedClipId]);
+  }, [appDispatch, generalPreferences.confirmDeletes, state.selectedClipId, t]);
   const handleSplitClip = useCallback(() => {
     if (!state.selectedClipId) return;
     appDispatch({ type: "splitClip", id: state.selectedClipId, time: playheadRef.current });
@@ -482,8 +534,8 @@ function App() {
   const handleJumpEnd = useCallback(() => seek(total), [seek, total]);
 
   useEffect(() => {
-    if (selectedClip) setTransformOpen(true);
-  }, [selectedClip?.id]);
+    if (!selectedClip) setTransformOpen(false);
+  }, [selectedClip]);
 
   // Keyboard: standard project/edit/view shortcuts plus transport and clip editing keys.
   useEffect(() => {
@@ -568,6 +620,7 @@ function App() {
       } else if (e.code === "Delete" || e.code === "Backspace") {
         if (state.selectedClipId) {
           e.preventDefault();
+          if (generalPreferences.confirmDeletes && !confirm(t("timeline.deleteClipConfirm"))) return;
           appDispatch({ type: "deleteClip", id: state.selectedClipId });
         }
       } else if (e.code === "KeyS") {
@@ -582,6 +635,7 @@ function App() {
   }, [
     appDispatch,
     exporting,
+    generalPreferences.confirmDeletes,
     handleExportOpen,
     handleJumpEnd,
     handleJumpStart,
@@ -597,6 +651,7 @@ function App() {
     redo,
     saveCurrentProject,
     state.selectedClipId,
+    t,
     toggle,
     undo,
   ]);
@@ -665,14 +720,20 @@ function App() {
             state={state}
             dispatch={appDispatch}
             open={transformOpen}
-            onOpenChange={setTransformOpen}
+            onOpenChange={handleTransformOpenChange}
             width={drawerWidth}
             onResizeStart={startDrawerResize}
           />
         </div>
       </div>
 
-      <Timeline state={state} playhead={playhead} dispatch={appDispatch} onSeek={seek} />
+      <Timeline
+        state={state}
+        playhead={playhead}
+        dispatch={appDispatch}
+        onSeek={seek}
+        confirmDeletes={generalPreferences.confirmDeletes}
+      />
 
       <div className="statusbar">
         <span className="statusbar-text">{status || t("status.ready")}</span>

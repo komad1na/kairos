@@ -4,7 +4,16 @@ mod session_log;
 use ffmpeg::{ExportProject, PreviewCacheStats, VideoInfo};
 use session_log::SessionLogSnapshot;
 use std::fs;
+use std::process::Command;
 use tauri::{AppHandle, Emitter, Manager};
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct GpuAdapter {
+    name: String,
+    vendor: String,
+    integrated: Option<bool>,
+}
 
 /// Reads metadata (duration, dimensions, fps, codecs, audio) of the chosen file.
 #[tauri::command]
@@ -224,6 +233,14 @@ async fn session_log_snapshot() -> Result<SessionLogSnapshot, String> {
         .map_err(|e| e.to_string())?
 }
 
+/// Returns display adapters so the frontend can hide unavailable hardware encoders.
+#[tauri::command]
+async fn gpu_adapters() -> Result<Vec<GpuAdapter>, String> {
+    tauri::async_runtime::spawn_blocking(detect_gpu_adapters)
+        .await
+        .map_err(|e| e.to_string())?
+}
+
 /// Exits the app from the Rust side so closing does not depend on JS window destroy permissions.
 #[tauri::command]
 async fn request_app_exit(app: AppHandle) -> Result<(), String> {
@@ -283,6 +300,7 @@ pub fn run() {
             load_project,
             append_session_log,
             session_log_snapshot,
+            gpu_adapters,
             request_app_exit
         ])
         .run(tauri::generate_context!())
@@ -299,4 +317,82 @@ fn log_info(message: impl AsRef<str>) {
 
 fn log_error(message: impl AsRef<str>) {
     let _ = session_log::append("error", message.as_ref());
+}
+
+#[cfg(target_os = "windows")]
+fn detect_gpu_adapters() -> Result<Vec<GpuAdapter>, String> {
+    let output = Command::new("powershell")
+        .args([
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-Command",
+            "Get-CimInstance Win32_VideoController | ForEach-Object { Write-Output ($_.Name + [char]9 + $_.AdapterCompatibility) }",
+        ])
+        .output()
+        .map_err(|e| format!("failed to query GPU adapters: {e}"))?;
+
+    if !output.status.success() {
+        return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    Ok(stdout
+        .lines()
+        .filter_map(|line| {
+            let line = line.trim();
+            if line.is_empty() {
+                return None;
+            }
+            let mut parts = line.splitn(2, '\t');
+            let name = parts.next().unwrap_or_default().trim().to_string();
+            if name.is_empty() {
+                return None;
+            }
+            let vendor = parts
+                .next()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(ToOwned::to_owned)
+                .unwrap_or_else(|| infer_gpu_vendor(&name));
+            Some(GpuAdapter {
+                integrated: infer_integrated_gpu(&name),
+                name,
+                vendor,
+            })
+        })
+        .collect())
+}
+
+#[cfg(not(target_os = "windows"))]
+fn detect_gpu_adapters() -> Result<Vec<GpuAdapter>, String> {
+    Ok(Vec::new())
+}
+
+fn infer_gpu_vendor(name: &str) -> String {
+    let lower = name.to_lowercase();
+    if lower.contains("nvidia") {
+        "NVIDIA".into()
+    } else if lower.contains("amd") || lower.contains("radeon") || lower.contains("advanced micro") {
+        "AMD".into()
+    } else if lower.contains("intel") {
+        "Intel".into()
+    } else {
+        "Unknown".into()
+    }
+}
+
+fn infer_integrated_gpu(name: &str) -> Option<bool> {
+    let lower = name.to_lowercase();
+    if lower.contains("intel") && !lower.contains("arc") {
+        return Some(true);
+    }
+    if lower.contains("radeon graphics") && !lower.contains(" rx ") && !lower.contains(" pro ") {
+        return Some(true);
+    }
+    if lower.contains("nvidia") || lower.contains("geforce") || lower.contains("quadro") {
+        return Some(false);
+    }
+    None
 }

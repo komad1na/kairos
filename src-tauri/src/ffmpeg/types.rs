@@ -194,6 +194,7 @@ pub enum ExportRateControl {
 pub enum ExportEncoder {
     X264,
     H264Nvenc,
+    H264Amf,
 }
 
 /// The whole timeline as sent for rendering.

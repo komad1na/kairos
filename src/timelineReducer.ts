@@ -26,7 +26,7 @@ import { clamp, placeClip, placePair } from "./timeline";
 
 const MIN_CLIP_LEN = 0.1;
 const MIN_PX_PER_SEC = 10;
-const DEFAULT_PX_PER_SEC = 30;
+const DEFAULT_PX_PER_SEC = 50;
 const MAX_PX_PER_SEC = 300;
 const MIN_CLIP_SCALE = 0.05;
 const MAX_CLIP_SCALE = 20;

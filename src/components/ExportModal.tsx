@@ -13,11 +13,14 @@ import {
   Slider,
   Space,
   Tabs,
+  Tooltip,
   Typography,
 } from "antd";
+import { InfoCircleOutlined } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
+import { gpuAdapters, type GpuAdapter } from "../api";
 import { ProjectSettings } from "../types";
-import { logInfo } from "../logger";
+import { logError, logInfo } from "../logger";
 import {
   EXPORT_PRESETS,
   ExportProfile,
@@ -37,6 +40,7 @@ import {
   SavedExportSettings,
   suggestVideoBitrateKbps,
 } from "../exportSettings";
+import { availableExportEncoderOptions, isExportEncoderAvailable } from "../exportEncoders";
 
 interface Props {
   open: boolean;
@@ -82,6 +86,7 @@ export function ExportModal({
   const [profiles, setProfiles] = useState<ExportProfile[]>([]);
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
   const [profileName, setProfileName] = useState("");
+  const [gpuAdapterList, setGpuAdapterList] = useState<GpuAdapter[] | null>(null);
 
   useEffect(() => {
     if (open) {
@@ -90,8 +95,26 @@ export function ExportModal({
       setProfiles(loadExportProfiles(settings));
       setSelectedProfileId(null);
       setProfileName("");
+      void gpuAdapters()
+        .then(setGpuAdapterList)
+        .catch((e) => {
+          logError("export_modal:gpu_adapters:error", e);
+          setGpuAdapterList([]);
+        });
     }
   }, [open, settings]);
+
+  useEffect(() => {
+    if (
+      !gpuAdapterList ||
+      isExportEncoderAvailable(
+        encoder,
+        gpuAdapterList,
+      )
+    )
+      return;
+    setEncoder("x264");
+  }, [encoder, gpuAdapterList]);
 
   function handleOk() {
     const res = resolveResolution(resKey, settings);
@@ -169,8 +192,17 @@ export function ExportModal({
     const profile = profiles.find((item) => item.id === id);
     if (!profile) return;
     logInfo("export_modal:profile:apply", { id: profile.id, name: profile.name });
-    applySavedSettings(profile.settings);
-    saveExportSettings(profile.settings);
+    const settings = {
+      ...profile.settings,
+      encoder: isExportEncoderAvailable(
+        profile.settings.encoder,
+        gpuAdapterList,
+      )
+        ? profile.settings.encoder
+        : "x264",
+    };
+    applySavedSettings(settings);
+    saveExportSettings(settings);
   }
 
   function handleSaveProfile() {
@@ -205,6 +237,7 @@ export function ExportModal({
   }
 
   const selectedProfile = profiles.find((profile) => profile.id === selectedProfileId) ?? null;
+  const encoderOptions = availableExportEncoderOptions(t, gpuAdapterList);
   const progressMode = exporting || exportDone;
   const shownProgress = exportDone ? 100 : progressPercent;
 
@@ -319,21 +352,11 @@ export function ExportModal({
                       ]}
                     />
                   </Form.Item>
-                  <Form.Item
-                    label={t("export.encoder")}
-                    extra={
-                      encoder === "h264Nvenc"
-                        ? t("export.encoderNvencHint")
-                        : t("export.encoderX264Hint")
-                    }
-                  >
+                  <Form.Item label={labelWithInfo(t("export.encoder"), encoderHint(encoder, t))}>
                     <Select
                       value={encoder}
                       onChange={setEncoder}
-                      options={[
-                        { value: "x264", label: t("export.encoderX264") },
-                        { value: "h264Nvenc", label: t("export.encoderNvenc") },
-                      ]}
+                      options={encoderOptions}
                     />
                   </Form.Item>
                   <Form.Item label={t("export.rateControl")}>
@@ -454,6 +477,26 @@ function formatEta(seconds: number): string {
   return minutes > 0 ? `${minutes}m ${secs}s` : `${secs}s`;
 }
 
+function labelWithInfo(label: string, info: string) {
+  return (
+    <span className="label-with-info">
+      <span>{label}</span>
+      <Tooltip title={info}>
+        <InfoCircleOutlined />
+      </Tooltip>
+    </span>
+  );
+}
+
+function encoderHint(
+  encoder: ExportEncoder,
+  t: (key: string, options?: Record<string, unknown>) => string,
+): string {
+  if (encoder === "h264Nvenc") return t("export.encoderNvencHint");
+  if (encoder === "h264Amf") return t("export.encoderAmfHint");
+  return t("export.encoderX264Hint");
+}
+
 function profileSummary(
   profileSettings: SavedExportSettings,
   projectSettings: ProjectSettings,
@@ -461,7 +504,11 @@ function profileSummary(
 ): string {
   const res = resolveResolution(profileSettings.resKey, projectSettings);
   const encoder =
-    profileSettings.encoder === "h264Nvenc" ? t("export.encoderNvenc") : t("export.encoderX264");
+    profileSettings.encoder === "h264Nvenc"
+      ? t("export.encoderNvenc")
+      : profileSettings.encoder === "h264Amf"
+        ? t("export.encoderAmf")
+        : t("export.encoderX264");
   const video =
     profileSettings.rateControl === "bitrate"
       ? `${Number((profileSettings.videoBitrateKbps / 1000).toFixed(2))} Mbps`

@@ -11,13 +11,24 @@ import {
   Select,
   Slider,
   Space,
+  Switch,
   Tabs,
+  Tooltip,
   Typography,
 } from "antd";
-import { DeleteOutlined, ReloadOutlined } from "@ant-design/icons";
+import {
+  DeleteOutlined,
+  FolderOpenOutlined,
+  InfoCircleOutlined,
+  ReloadOutlined,
+} from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
 import {
   clearPreviewCache,
+  GpuAdapter,
+  gpuAdapters,
+  openSystemPath,
+  pickFolderPath,
   PreviewCacheStats,
   previewCacheStats,
   SessionLogSnapshot,
@@ -41,6 +52,12 @@ import {
   SavedExportSettings,
   suggestVideoBitrateKbps,
 } from "../exportSettings";
+import { availableExportEncoderOptions, isExportEncoderAvailable } from "../exportEncoders";
+import {
+  GeneralPreferences,
+  loadGeneralPreferences,
+  saveGeneralPreferences,
+} from "../generalPreferences";
 import { LANGUAGES } from "../i18n";
 import { logError, logInfo } from "../logger";
 import {
@@ -87,6 +104,10 @@ export function PreferencesModal({
   const [profiles, setProfiles] = useState<ExportProfile[]>([]);
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
   const [profileName, setProfileName] = useState("");
+  const [gpuAdapterList, setGpuAdapterList] = useState<GpuAdapter[] | null>(null);
+  const [generalPreferences, setGeneralPreferences] = useState<GeneralPreferences>(() =>
+    loadGeneralPreferences(),
+  );
   const [proxyHeight, setProxyHeight] = useState<PreviewProxyHeight>(() =>
     loadPreviewProxyHeight(),
   );
@@ -126,15 +147,34 @@ export function PreferencesModal({
     if (!open) return;
     const saved = loadExportSettings(settings);
     applySavedSettings(saved);
+    setGeneralPreferences(loadGeneralPreferences());
     setProfiles(loadExportProfiles(settings));
     setSelectedProfileId(null);
     setProfileName("");
     const savedProxyHeight = loadPreviewProxyHeight();
     setProxyHeight(savedProxyHeight);
     setInitialProxyHeight(savedProxyHeight);
+    void gpuAdapters()
+      .then(setGpuAdapterList)
+      .catch((e) => {
+        logError("preferences:gpu_adapters:error", e);
+        setGpuAdapterList([]);
+      });
     void refreshCache();
     void refreshLogs();
   }, [open, refreshCache, refreshLogs, settings]);
+
+  useEffect(() => {
+    if (
+      !gpuAdapterList ||
+      isExportEncoderAvailable(
+        encoder,
+        gpuAdapterList,
+      )
+    )
+      return;
+    setEncoder("x264");
+  }, [encoder, gpuAdapterList]);
 
   function handleResolutionChange(next: string) {
     setResKey(next);
@@ -188,8 +228,17 @@ export function PreferencesModal({
     const profile = profiles.find((item) => item.id === id);
     if (!profile) return;
     logInfo("preferences:export_profile:apply", { id: profile.id, name: profile.name });
-    applySavedSettings(profile.settings);
-    saveExportSettings(profile.settings);
+    const settings = {
+      ...profile.settings,
+      encoder: isExportEncoderAvailable(
+        profile.settings.encoder,
+        gpuAdapterList,
+      )
+        ? profile.settings.encoder
+        : "x264",
+    };
+    applySavedSettings(settings);
+    saveExportSettings(settings);
   }
 
   function handleSaveProfile() {
@@ -244,7 +293,27 @@ export function PreferencesModal({
     }
   }
 
+  async function openPreferencePath(path: string | null | undefined) {
+    if (!path) return;
+    try {
+      await openSystemPath(path);
+    } catch (e) {
+      setError(String(e));
+      logError("preferences:open_path:error", { path, error: String(e) });
+    }
+  }
+
+  function updateGeneralPreferences(patch: Partial<GeneralPreferences>) {
+    setGeneralPreferences((current) => ({ ...current, ...patch }));
+  }
+
+  async function chooseGeneralFolder(key: "defaultExportFolder" | "defaultProjectFolder") {
+    const selected = await pickFolderPath(generalPreferences[key]);
+    if (selected) updateGeneralPreferences({ [key]: selected });
+  }
+
   function handleSave() {
+    saveGeneralPreferences(generalPreferences);
     saveExportSettings(currentSavedSettings());
     savePreviewProxyHeight(proxyHeight);
     const proxyChanged = proxyHeight !== initialProxyHeight;
@@ -259,6 +328,7 @@ export function PreferencesModal({
   }
 
   const selectedProfile = profiles.find((profile) => profile.id === selectedProfileId) ?? null;
+  const encoderOptions = availableExportEncoderOptions(t, gpuAdapterList);
 
   return (
     <Modal
@@ -266,7 +336,9 @@ export function PreferencesModal({
       title={t("preferences.title")}
       okText={t("common.save")}
       cancelText={t("common.cancel")}
-      width={620}
+      width={685}
+      className="preferences-modal"
+      wrapClassName="preferences-modal-wrap"
       onCancel={onCancel}
       onOk={handleSave}
     >
@@ -276,17 +348,75 @@ export function PreferencesModal({
             key: "general",
             label: t("preferences.general"),
             children: (
-              <Form layout="vertical">
-                <Form.Item label={t("toolbar.language")}>
-                  <Select
-                    value={i18n.language}
-                    onChange={(v) => {
-                      logInfo("preferences:language:change", { language: v });
-                      void i18n.changeLanguage(v);
-                    }}
-                    options={LANGUAGES.map((l) => ({ value: l.code, label: l.label }))}
-                  />
-                </Form.Item>
+              <Form className="preferences-general-panel" layout="vertical">
+                <div className="preferences-general-grid">
+                  <Form.Item label={t("toolbar.language")}>
+                    <Select
+                      value={i18n.language}
+                      onChange={(v) => {
+                        logInfo("preferences:language:change", { language: v });
+                        void i18n.changeLanguage(v);
+                      }}
+                      options={LANGUAGES.map((l) => ({ value: l.code, label: l.label }))}
+                    />
+                  </Form.Item>
+                  <Form.Item label={t("preferences.accentColor")}>
+                    <Select
+                      value={generalPreferences.accentColor}
+                      onChange={(accentColor) => updateGeneralPreferences({ accentColor })}
+                      options={[
+                        { value: "#4f8cff", label: t("preferences.accentBlue") },
+                        { value: "#22c55e", label: t("preferences.accentGreen") },
+                        { value: "#f59e0b", label: t("preferences.accentAmber") },
+                        { value: "#e879f9", label: t("preferences.accentPink") },
+                      ]}
+                    />
+                  </Form.Item>
+                </div>
+                <div className="preferences-general-grid">
+                  <Form.Item
+                    label={labelWithInfo(
+                      t("preferences.autosaveInterval"),
+                      t("preferences.autosaveIntervalHint"),
+                    )}
+                  >
+                    <InputNumber
+                      min={0}
+                      max={60}
+                      value={generalPreferences.autosaveIntervalMinutes}
+                      addonAfter={t("preferences.minutes")}
+                      onChange={(value) =>
+                        updateGeneralPreferences({
+                          autosaveIntervalMinutes: Number(value ?? 0),
+                        })
+                      }
+                    />
+                  </Form.Item>
+                  <Form.Item label={t("preferences.confirmDeletes")}>
+                    <Switch
+                      checked={generalPreferences.confirmDeletes}
+                      onChange={(confirmDeletes) => updateGeneralPreferences({ confirmDeletes })}
+                    />
+                  </Form.Item>
+                </div>
+                <div className="preferences-folder-grid">
+                  <Form.Item label={t("preferences.defaultProjectFolder")}>
+                    <Space.Compact className="preferences-folder-input">
+                      <Input readOnly value={generalPreferences.defaultProjectFolder} />
+                      <Button onClick={() => chooseGeneralFolder("defaultProjectFolder")}>
+                        {t("preferences.chooseFolder")}
+                      </Button>
+                    </Space.Compact>
+                  </Form.Item>
+                  <Form.Item label={t("preferences.defaultExportFolder")}>
+                    <Space.Compact className="preferences-folder-input">
+                      <Input readOnly value={generalPreferences.defaultExportFolder} />
+                      <Button onClick={() => chooseGeneralFolder("defaultExportFolder")}>
+                        {t("preferences.chooseFolder")}
+                      </Button>
+                    </Space.Compact>
+                  </Form.Item>
+                </div>
               </Form>
             ),
           },
@@ -326,9 +456,16 @@ export function PreferencesModal({
                 <Typography.Paragraph type="secondary" className="preferences-cache-path">
                   {cache?.path ?? ""}
                 </Typography.Paragraph>
-                <Space>
+                <Space wrap>
                   <Button icon={<ReloadOutlined />} loading={cacheLoading} onClick={refreshCache}>
                     {t("preferences.refreshCache")}
+                  </Button>
+                  <Button
+                    icon={<FolderOpenOutlined />}
+                    disabled={!cache?.path}
+                    onClick={() => openPreferencePath(cache?.path)}
+                  >
+                    {t("preferences.openProxyFolder")}
                   </Button>
                   <Button
                     danger
@@ -340,6 +477,178 @@ export function PreferencesModal({
                   </Button>
                 </Space>
               </div>
+            ),
+          },
+          {
+            key: "export",
+            label: t("preferences.exportDefaults"),
+            children: (
+              <Form className="preferences-export-panel" layout="vertical">
+                <section className="preferences-export-profile">
+                  <div className="preferences-export-profile-main">
+                    <Form.Item className="preferences-export-field" label={t("export.profile")}>
+                      <Select
+                        value={selectedProfileId ?? undefined}
+                        placeholder={t("export.chooseProfile")}
+                        onChange={handleProfileChange}
+                        options={profiles.map((profile) => ({
+                          value: profile.id,
+                          label: profile.name,
+                        }))}
+                      />
+                    </Form.Item>
+                    {selectedProfile && (
+                      <Typography.Paragraph
+                        type="secondary"
+                        className="preferences-profile-summary"
+                      >
+                        {profileSummary(selectedProfile.settings, settings, t)}
+                      </Typography.Paragraph>
+                    )}
+                  </div>
+                  <div className="preferences-export-profile-actions">
+                    <Button
+                      disabled={!selectedProfileId}
+                      onClick={() => selectedProfileId && handleProfileChange(selectedProfileId)}
+                    >
+                      {t("export.applyProfile")}
+                    </Button>
+                    <Popconfirm
+                      title={t("export.deleteProfileConfirm")}
+                      okText={t("common.delete")}
+                      cancelText={t("common.cancel")}
+                      onConfirm={handleDeleteProfile}
+                    >
+                      <Button danger disabled={!selectedProfileId}>
+                        {t("export.deleteProfile")}
+                      </Button>
+                    </Popconfirm>
+                  </div>
+                </section>
+                <div className="preferences-export-grid">
+                  <section className="preferences-export-section preferences-export-section-wide">
+                    <Form.Item className="preferences-export-field" label={t("export.resolution")}>
+                  <Select
+                    value={resKey}
+                    onChange={handleResolutionChange}
+                    options={[
+                      {
+                        value: "project",
+                        label: t("export.resProject", { w: settings.width, h: settings.height }),
+                      },
+                      { value: "2160", label: "2160p (3840×2160)" },
+                      { value: "1080", label: "1080p (1920×1080)" },
+                      { value: "720", label: "720p (1280×720)" },
+                      { value: "480", label: "480p (854×480)" },
+                    ]}
+                  />
+                </Form.Item>
+                    <Form.Item
+                      className="preferences-export-field"
+                  label={labelWithInfo(t("export.encoder"), encoderHint(encoder, t))}
+                >
+                  <Select
+                    value={encoder}
+                    onChange={setEncoder}
+                    options={encoderOptions}
+                  />
+                </Form.Item>
+                  </section>
+
+                  <section className="preferences-export-section">
+                    <Form.Item className="preferences-export-field" label={t("export.rateControl")}>
+                  <Segmented
+                    block
+                    value={rateControl}
+                    onChange={(value) => setRateControl(value as ExportRateControl)}
+                    options={[
+                      { value: "crf", label: t("export.rateControlCrf") },
+                      { value: "bitrate", label: t("export.rateControlBitrate") },
+                    ]}
+                  />
+                </Form.Item>
+                {rateControl === "crf" ? (
+                  <>
+                    <Form.Item className="preferences-export-field" label={t("export.quality")}>
+                      <Select
+                        value={quality}
+                        onChange={handleQualityChange}
+                        options={[
+                          { value: "high", label: t("export.qualityHigh") },
+                          { value: "medium", label: t("export.qualityMedium") },
+                          { value: "low", label: t("export.qualityLow") },
+                          { value: "custom", label: t("export.qualityCustom") },
+                        ]}
+                      />
+                    </Form.Item>
+                    <Form.Item className="preferences-export-field" label={t("export.crf")}>
+                      <div className="preferences-range-row">
+                        <Slider
+                          min={0}
+                          max={51}
+                          value={crf}
+                          onChange={(value) => handleCrfChange(value as number)}
+                          tooltip={{ formatter: (value) => `${value}` }}
+                        />
+                        <InputNumber min={0} max={51} value={crf} onChange={handleCrfChange} />
+                      </div>
+                    </Form.Item>
+                  </>
+                ) : (
+                  <Form.Item className="preferences-export-field" label={t("export.videoBitrate")}>
+                    <InputNumber
+                      min={0.25}
+                      max={200}
+                      step={0.5}
+                      value={Number((videoBitrateKbps / 1000).toFixed(2))}
+                      onChange={handleVideoBitrateChange}
+                      addonAfter="Mbps"
+                      className="preferences-inline-number"
+                    />
+                  </Form.Item>
+                )}
+                  </section>
+
+                  <section className="preferences-export-section">
+                    <Form.Item className="preferences-export-field" label={t("export.audioBitrate")}>
+                  <Select
+                    value={audioBitrateKbps}
+                    onChange={setAudioBitrateKbps}
+                    options={[
+                      { value: 96, label: "96 kbps" },
+                      { value: 128, label: "128 kbps" },
+                      { value: 192, label: "192 kbps" },
+                      { value: 256, label: "256 kbps" },
+                      { value: 320, label: "320 kbps" },
+                    ]}
+                  />
+                    </Form.Item>
+                    <Form.Item className="preferences-export-field" label={t("export.preset")}>
+                  <Select
+                    value={preset}
+                    onChange={setPreset}
+                    options={EXPORT_PRESETS.map((value) => ({ value, label: value }))}
+                  />
+                    </Form.Item>
+                  </section>
+                </div>
+
+                <section className="preferences-export-save-profile">
+                  <Form.Item className="preferences-export-field" label={t("export.profileName")}>
+                    <Space.Compact className="preferences-save-profile-input">
+                    <Input
+                      value={profileName}
+                      placeholder={t("export.profileNamePlaceholder")}
+                      onChange={(e) => setProfileName(e.target.value)}
+                      onPressEnter={handleSaveProfile}
+                    />
+                    <Button type="primary" disabled={!profileName.trim()} onClick={handleSaveProfile}>
+                      {t("export.saveProfile")}
+                    </Button>
+                    </Space.Compact>
+                  </Form.Item>
+                </section>
+              </Form>
             ),
           },
           {
@@ -362,9 +671,16 @@ export function PreferencesModal({
                     </Typography.Paragraph>
                   </div>
                 </div>
-                <Space>
+                <Space wrap>
                   <Button icon={<ReloadOutlined />} loading={logLoading} onClick={refreshLogs}>
                     {t("preferences.refreshLogs")}
+                  </Button>
+                  <Button
+                    icon={<FolderOpenOutlined />}
+                    disabled={!logSnapshot?.directory}
+                    onClick={() => openPreferencePath(logSnapshot?.directory)}
+                  >
+                    {t("preferences.openLogFolder")}
                   </Button>
                 </Space>
                 <Input.TextArea
@@ -376,172 +692,30 @@ export function PreferencesModal({
               </div>
             ),
           },
-          {
-            key: "export",
-            label: t("preferences.exportDefaults"),
-            children: (
-              <Form layout="vertical">
-                <div className="preferences-profile-section">
-                  <Form.Item label={t("export.profile")}>
-                    <Select
-                      value={selectedProfileId ?? undefined}
-                      placeholder={t("export.chooseProfile")}
-                      onChange={handleProfileChange}
-                      options={profiles.map((profile) => ({
-                        value: profile.id,
-                        label: profile.name,
-                      }))}
-                    />
-                  </Form.Item>
-                  {selectedProfile && (
-                    <Typography.Paragraph type="secondary" className="preferences-profile-summary">
-                      {profileSummary(selectedProfile.settings, settings, t)}
-                    </Typography.Paragraph>
-                  )}
-                  <Space>
-                    <Button
-                      disabled={!selectedProfileId}
-                      onClick={() => selectedProfileId && handleProfileChange(selectedProfileId)}
-                    >
-                      {t("export.applyProfile")}
-                    </Button>
-                    <Popconfirm
-                      title={t("export.deleteProfileConfirm")}
-                      okText={t("common.delete")}
-                      cancelText={t("common.cancel")}
-                      onConfirm={handleDeleteProfile}
-                    >
-                      <Button danger disabled={!selectedProfileId}>
-                        {t("export.deleteProfile")}
-                      </Button>
-                    </Popconfirm>
-                  </Space>
-                </div>
-                <Form.Item label={t("export.resolution")}>
-                  <Select
-                    value={resKey}
-                    onChange={handleResolutionChange}
-                    options={[
-                      {
-                        value: "project",
-                        label: t("export.resProject", { w: settings.width, h: settings.height }),
-                      },
-                      { value: "2160", label: "2160p (3840×2160)" },
-                      { value: "1080", label: "1080p (1920×1080)" },
-                      { value: "720", label: "720p (1280×720)" },
-                      { value: "480", label: "480p (854×480)" },
-                    ]}
-                  />
-                </Form.Item>
-                <Form.Item
-                  label={t("export.encoder")}
-                  extra={
-                    encoder === "h264Nvenc"
-                      ? t("export.encoderNvencHint")
-                      : t("export.encoderX264Hint")
-                  }
-                >
-                  <Select
-                    value={encoder}
-                    onChange={setEncoder}
-                    options={[
-                      { value: "x264", label: t("export.encoderX264") },
-                      { value: "h264Nvenc", label: t("export.encoderNvenc") },
-                    ]}
-                  />
-                </Form.Item>
-                <Form.Item label={t("export.rateControl")}>
-                  <Segmented
-                    style={{ width: "100%" }}
-                    value={rateControl}
-                    onChange={(value) => setRateControl(value as ExportRateControl)}
-                    options={[
-                      { value: "crf", label: t("export.rateControlCrf") },
-                      { value: "bitrate", label: t("export.rateControlBitrate") },
-                    ]}
-                  />
-                </Form.Item>
-                {rateControl === "crf" ? (
-                  <>
-                    <Form.Item label={t("export.quality")}>
-                      <Select
-                        value={quality}
-                        onChange={handleQualityChange}
-                        options={[
-                          { value: "high", label: t("export.qualityHigh") },
-                          { value: "medium", label: t("export.qualityMedium") },
-                          { value: "low", label: t("export.qualityLow") },
-                          { value: "custom", label: t("export.qualityCustom") },
-                        ]}
-                      />
-                    </Form.Item>
-                    <Form.Item label={t("export.crf")}>
-                      <div className="preferences-range-row">
-                        <Slider
-                          min={0}
-                          max={51}
-                          value={crf}
-                          onChange={(value) => handleCrfChange(value as number)}
-                          tooltip={{ formatter: (value) => `${value}` }}
-                        />
-                        <InputNumber min={0} max={51} value={crf} onChange={handleCrfChange} />
-                      </div>
-                    </Form.Item>
-                  </>
-                ) : (
-                  <Form.Item label={t("export.videoBitrate")}>
-                    <InputNumber
-                      min={0.25}
-                      max={200}
-                      step={0.5}
-                      value={Number((videoBitrateKbps / 1000).toFixed(2))}
-                      onChange={handleVideoBitrateChange}
-                      addonAfter="Mbps"
-                      style={{ width: 180 }}
-                    />
-                  </Form.Item>
-                )}
-                <Form.Item label={t("export.audioBitrate")}>
-                  <Select
-                    value={audioBitrateKbps}
-                    onChange={setAudioBitrateKbps}
-                    style={{ width: 180 }}
-                    options={[
-                      { value: 96, label: "96 kbps" },
-                      { value: 128, label: "128 kbps" },
-                      { value: 192, label: "192 kbps" },
-                      { value: 256, label: "256 kbps" },
-                      { value: 320, label: "320 kbps" },
-                    ]}
-                  />
-                </Form.Item>
-                <Form.Item label={t("export.preset")}>
-                  <Select
-                    value={preset}
-                    onChange={setPreset}
-                    options={EXPORT_PRESETS.map((value) => ({ value, label: value }))}
-                  />
-                </Form.Item>
-                <Form.Item label={t("export.profileName")}>
-                  <Space.Compact style={{ width: "100%" }}>
-                    <Input
-                      value={profileName}
-                      placeholder={t("export.profileNamePlaceholder")}
-                      onChange={(e) => setProfileName(e.target.value)}
-                      onPressEnter={handleSaveProfile}
-                    />
-                    <Button type="primary" disabled={!profileName.trim()} onClick={handleSaveProfile}>
-                      {t("export.saveProfile")}
-                    </Button>
-                  </Space.Compact>
-                </Form.Item>
-              </Form>
-            ),
-          },
         ]}
       />
     </Modal>
   );
+}
+
+function labelWithInfo(label: string, info: string) {
+  return (
+    <span className="label-with-info">
+      <span>{label}</span>
+      <Tooltip title={info}>
+        <InfoCircleOutlined />
+      </Tooltip>
+    </span>
+  );
+}
+
+function encoderHint(
+  encoder: ExportEncoder,
+  t: (key: string, options?: Record<string, unknown>) => string,
+): string {
+  if (encoder === "h264Nvenc") return t("export.encoderNvencHint");
+  if (encoder === "h264Amf") return t("export.encoderAmfHint");
+  return t("export.encoderX264Hint");
 }
 
 function formatBytes(bytes: number): string {
@@ -563,7 +737,11 @@ function profileSummary(
 ): string {
   const res = resolveResolution(profileSettings.resKey, projectSettings);
   const encoder =
-    profileSettings.encoder === "h264Nvenc" ? t("export.encoderNvenc") : t("export.encoderX264");
+    profileSettings.encoder === "h264Nvenc"
+      ? t("export.encoderNvenc")
+      : profileSettings.encoder === "h264Amf"
+        ? t("export.encoderAmf")
+        : t("export.encoderX264");
   const video =
     profileSettings.rateControl === "bitrate"
       ? `${Number((profileSettings.videoBitrateKbps / 1000).toFixed(2))} Mbps`

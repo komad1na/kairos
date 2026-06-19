@@ -438,6 +438,7 @@ fn video_encoder_name(encoder: ExportEncoder) -> &'static str {
     match encoder {
         ExportEncoder::X264 => "libx264",
         ExportEncoder::H264Nvenc => "h264_nvenc",
+        ExportEncoder::H264Amf => "h264_amf",
     }
 }
 
@@ -478,6 +479,28 @@ fn push_video_encoder_options(args: &mut Vec<String>, project: &ExportProject) {
                 }
             }
         }
+        ExportEncoder::H264Amf => {
+            args.push("-quality".into());
+            args.push(amf_quality_for_x264_preset(&project.preset).into());
+            match project.rate_control {
+                ExportRateControl::Bitrate => {
+                    args.push("-rc".into());
+                    args.push("hqvbr".into());
+                    push_video_bitrate_args(args, export_video_bitrate_kbps(project));
+                }
+                ExportRateControl::Crf => {
+                    let qp = project.crf.clamp(0, 51).to_string();
+                    args.push("-rc".into());
+                    args.push("cqp".into());
+                    args.push("-qp_i".into());
+                    args.push(qp.clone());
+                    args.push("-qp_p".into());
+                    args.push(qp.clone());
+                    args.push("-qp_b".into());
+                    args.push(qp);
+                }
+            }
+        }
     }
 }
 
@@ -498,6 +521,14 @@ fn nvenc_preset_for_x264_preset(preset: &str) -> &'static str {
         "medium" => "p5",
         "slow" | "slower" | "veryslow" => "p6",
         _ => "p4",
+    }
+}
+
+fn amf_quality_for_x264_preset(preset: &str) -> &'static str {
+    match preset {
+        "ultrafast" | "superfast" | "veryfast" | "faster" => "speed",
+        "slow" | "slower" | "veryslow" => "quality",
+        _ => "balanced",
     }
 }
 

@@ -134,6 +134,12 @@ export const TransformDrawer = memo(function TransformDrawer({
     dispatch({ type: "linkClips", firstId: selectedClip.id, secondId: linkTargetId });
   }
 
+  const toggleTitle = !selectedClip
+    ? t("timeline.selectClipForEdit")
+    : open
+      ? t("timeline.closeEdit")
+      : t("timeline.openEdit");
+
   return (
     <aside
       className={`transform-drawer${open ? " open" : " closed"}`}
@@ -151,12 +157,15 @@ export const TransformDrawer = memo(function TransformDrawer({
         />
       )}
       <div className="transform-drawer-rail">
-        <Tooltip title={open ? t("timeline.closeEdit") : t("timeline.openEdit")} placement="left">
-          <Button
-            size="small"
-            icon={open ? <CloseOutlined /> : <EditOutlined />}
-            onClick={() => onOpenChange(!open)}
-          />
+        <Tooltip title={toggleTitle} placement="left">
+          <span>
+            <Button
+              size="small"
+              icon={open ? <CloseOutlined /> : <EditOutlined />}
+              disabled={!selectedClip}
+              onClick={() => onOpenChange(!open)}
+            />
+          </span>
         </Tooltip>
       </div>
       {open && (

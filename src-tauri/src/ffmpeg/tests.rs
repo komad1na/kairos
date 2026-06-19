@@ -161,6 +161,26 @@ fn nvenc_export_uses_hardware_encoder_options() {
 }
 
 #[test]
+fn amf_export_uses_hardware_encoder_options() {
+    let mut p = project(
+        vec![VideoTrack {
+            clips: vec![clip("/a.mp4", 0.0, 0.0, 5.0, 1.0, false)],
+        }],
+        vec![],
+    );
+    p.encoder = ExportEncoder::H264Amf;
+    p.preset = "slow".into();
+
+    let s = joined(&build_export_args(&p).unwrap());
+    assert!(s.contains("-c:v h264_amf"));
+    assert!(s.contains("-quality quality"));
+    assert!(s.contains("-rc cqp"));
+    assert!(s.contains("-qp_i 20"));
+    assert!(s.contains("-qp_p 20"));
+    assert!(s.contains("-qp_b 20"));
+}
+
+#[test]
 fn parses_ffmpeg_progress_time() {
     assert_eq!(parse_progress_seconds("out_time_ms=2500000"), Some(2.5));
     assert_eq!(

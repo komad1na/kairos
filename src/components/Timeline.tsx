@@ -31,6 +31,7 @@ interface Props {
   playhead: number;
   dispatch: React.Dispatch<Action>;
   onSeek: (t: number) => void;
+  confirmDeletes: boolean;
 }
 
 interface RulerScrub {
@@ -48,7 +49,13 @@ interface DropPreviewClip {
   valid: boolean;
 }
 
-export const Timeline = memo(function Timeline({ state, playhead, dispatch, onSeek }: Props) {
+export const Timeline = memo(function Timeline({
+  state,
+  playhead,
+  dispatch,
+  onSeek,
+  confirmDeletes,
+}: Props) {
   const { t } = useTranslation();
   const timelineRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -403,7 +410,11 @@ export const Timeline = memo(function Timeline({ state, playhead, dispatch, onSe
                     icon={<DeleteOutlined />}
                     onClick={() => {
                       const hasClips = clips.some((c) => c.trackId === tr.id);
-                      if (!hasClips || confirm(t("timeline.removeTrackConfirm", { name: tr.name }))) {
+                      if (
+                        !hasClips ||
+                        !confirmDeletes ||
+                        confirm(t("timeline.removeTrackConfirm", { name: tr.name }))
+                      ) {
                         dispatch({ type: "removeTrack", id: tr.id });
                       }
                     }}

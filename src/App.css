@@ -1363,10 +1363,93 @@ body,
 }
 
 /* ---------- Preferences ---------- */
+.preferences-modal-wrap {
+  overflow: hidden !important;
+}
+
+.preferences-modal {
+  top: 24px;
+  max-width: calc(100vw - 32px);
+  padding-bottom: 24px;
+}
+
+.preferences-modal .ant-modal-content {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 48px);
+  overflow: hidden;
+}
+
+.preferences-modal .ant-modal-header,
+.preferences-modal .ant-modal-footer {
+  flex: 0 0 auto;
+}
+
+.preferences-modal .ant-modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.preferences-modal .ant-modal-body::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+.preferences-modal .ant-tabs,
+.preferences-modal .ant-tabs-content-holder,
+.preferences-modal .ant-tabs-content,
+.preferences-modal .ant-tabs-tabpane {
+  min-height: 0;
+}
+
 .preferences-panel {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+.preferences-general-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.preferences-general-panel .ant-form-item {
+  margin-bottom: 0;
+}
+
+.label-with-info {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.label-with-info .anticon {
+  color: var(--muted);
+  cursor: help;
+  font-size: 12px;
+}
+
+.label-with-info .anticon:hover {
+  color: var(--accent);
+}
+
+.preferences-general-grid,
+.preferences-folder-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.preferences-folder-input {
+  width: 100%;
+}
+
+.preferences-folder-input input {
+  text-overflow: ellipsis;
 }
 
 .preferences-cache-card {
@@ -1411,6 +1494,82 @@ body,
   line-height: 1.5;
 }
 
+.preferences-export-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.preferences-export-profile,
+.preferences-export-section,
+.preferences-export-save-profile {
+  padding: 12px;
+  background: #222426;
+  border: 1px solid #3a3d40;
+  border-radius: 8px;
+}
+
+.preferences-export-profile {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) max-content;
+  align-items: start;
+  gap: 12px;
+}
+
+.preferences-export-profile-main {
+  min-width: 0;
+}
+
+.preferences-export-profile-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  padding-top: 32px;
+  white-space: nowrap;
+}
+
+.preferences-export-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.preferences-export-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.preferences-export-section-wide {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+}
+
+.preferences-export-field {
+  margin-bottom: 0 !important;
+}
+
+.preferences-export-field .ant-form-item-extra {
+  min-height: 18px;
+  margin-top: 4px;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.preferences-inline-number {
+  width: 180px;
+  max-width: 100%;
+}
+
+.preferences-save-profile-input {
+  width: 100%;
+}
+
 .preferences-profile-section {
   margin-bottom: 16px;
   padding: 12px;
@@ -1420,13 +1579,30 @@ body,
 }
 
 .preferences-profile-summary {
-  margin-top: -8px;
-  margin-bottom: 12px !important;
+  margin-top: 8px;
+  margin-bottom: 0 !important;
+  line-height: 1.4;
 }
 
 .preferences-range-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 110px;
+  grid-template-columns: minmax(0, 1fr) 92px;
   gap: 12px;
   align-items: center;
+}
+
+@media (max-width: 720px) {
+  .preferences-export-profile,
+  .preferences-export-grid,
+  .preferences-export-section-wide,
+  .preferences-general-grid,
+  .preferences-folder-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .preferences-export-profile-actions {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+    padding-top: 0;
+  }
 }

@@ -1,7 +1,7 @@
 import { ProjectSettings } from "./types";
 
 export type ExportRateControl = "crf" | "bitrate";
-export type ExportEncoder = "x264" | "h264Nvenc";
+export type ExportEncoder = "x264" | "h264Nvenc" | "h264Amf";
 export type QualityKey = "high" | "medium" | "low" | "custom";
 
 export interface ExportOptions {
@@ -77,7 +77,7 @@ export function loadExportSettings(settings: ProjectSettings): SavedExportSettin
         ? saved.resKey
         : fallback.resKey;
     const rateControl = saved.rateControl === "bitrate" ? "bitrate" : "crf";
-    const encoder = saved.encoder === "h264Nvenc" ? "h264Nvenc" : "x264";
+    const encoder = sanitizeEncoder(saved.encoder);
     const crf = clamp(Math.round(numberOrFallback(saved.crf ?? null, fallback.crf)), 0, 51);
     return {
       resKey,
@@ -187,7 +187,7 @@ function sanitizeExportSettings(
       ? saved.resKey
       : fallback.resKey;
   const rateControl = saved.rateControl === "bitrate" ? "bitrate" : "crf";
-  const encoder = saved.encoder === "h264Nvenc" ? "h264Nvenc" : "x264";
+  const encoder = sanitizeEncoder(saved.encoder);
   const crf = clamp(Math.round(numberOrFallback(saved.crf ?? null, fallback.crf)), 0, 51);
   return {
     resKey,
@@ -210,6 +210,10 @@ function sanitizeExportSettings(
         ? saved.preset
         : fallback.preset,
   };
+}
+
+function sanitizeEncoder(value: unknown): ExportEncoder {
+  return value === "h264Nvenc" || value === "h264Amf" ? value : "x264";
 }
 
 function finiteOr(value: unknown, fallback: number): number {
